@@ -8,6 +8,15 @@
 #include <unistd.h>
 #include <errno.h>
 #include <ctype.h>
+#include <stdbool.h>
+
+struct account {
+    char *id; 
+    char *password;
+};
+
+account* accounts;
+int lines;
 
 int isInt(char *);
 int sendall(int sock, char* buf, int*len);
@@ -18,47 +27,39 @@ int testWin(int a, int b, int c);
 void shutdownSocket(int sock);
 void tryClose(int sock);
 int recvall(int sock, char* buf, int*len);
+void read_file(char* path);
+bool permit_user(char* user, char* pass)
 
 int main(int argc, char* argv[]) {
 	char* port;
-	int a,b,c;
+	char* path;
 	int sock, new_sock;
 	socklen_t sin_size;
 	struct sockaddr_in myaddr, their_addr;
-	if(argc < 4 || argc > 5)
+	if(argc < 2 || argc > 3)
 	{
 		printf("Incorrect Argument Count");
 		exit(1);
 	}
-	if(!isInt(argv[1]) || !isInt(argv[2]) || !isInt(argv[3]))
+	
+	path = argv[1];
+	
+	if(argc == 3)
 	{
-		printf("One or more of the parameters is not a valid number");
-		exit(1);
-	}
-	/* test range of argument numbers*/
-	a = strtol(argv[1], NULL, 10);
-	b = strtol(argv[2], NULL, 10);
-	c = strtol(argv[3], NULL, 10);
-	if(a < 0 || a > 1000 || b < 0 || b > 1000 || c < 0 || c > 1000)
-	{
-		printf("One or more of the parameters is an illegal heap size");
-	}
-	if(argc == 5)
-	{
-		if(!isInt(argv[4]))
+		if(!isInt(argv[2]))
 		{
 			printf("Please enter a valid number as the port number");
 			exit(1);
 		}
-		port = argv[4];
+		port = argv[2];
 	}
 	else
 	{
-		port = "6444";
+		port = "6423";
 	}
 
 	/* open IPv4 TCP socket*/
-	if((sock = socket(PF_INET, SOCK_STREAM, 0))<0)
+	if((sock = socket(PF_INET, SOCK_STREAM, 0)) < 0)
 	{
 		perror("Could not open socket");
 		exit(errno);
@@ -68,20 +69,20 @@ int main(int argc, char* argv[]) {
 	myaddr.sin_port = htons((short)strtol(port, NULL, 10));
 	myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
 	/* try to bind*/
-	if(bind(sock, (struct sockaddr*)&(myaddr), sizeof(myaddr))<0)
+	if(bind(sock, (struct sockaddr*)&(myaddr), sizeof(myaddr)) < 0)
 	{
 		perror("Could not bind socket");
 		exit(errno);
 	}
 	/* try to listen to the ether*/
-	if(listen(sock, 1)<0)
+	if(listen(sock, 1) < 0)
 	{
 		perror("Could not listen to socket");
 		exit(errno);
 	}
 	sin_size = sizeof(struct sockaddr_in);
 	/* accept the connection*/
-	if((new_sock = accept(sock, (struct sockaddr*)&their_addr, &sin_size))<0)
+	if((new_sock = accept(sock, (struct sockaddr*)&their_addr, &sin_size)) < 0)
 	{
 		perror("Could not accept connection");
 		exit(errno);
@@ -89,9 +90,45 @@ int main(int argc, char* argv[]) {
 	/* by this point we have a connection. play the game*/
 	/* we can close the listening socket and play with the active socket*/
 	tryClose(sock);
-	playGame(new_sock,a , b, c);
+	read_file(path);
+	playGame(new_sock, a, b, c);
 	return 0;
 }
+
+void read_file(char* path)
+{
+    FILE* fp;
+    lines = 0;   // count how many lines are in the file
+    int current_character;
+    fp = fopen(path, "r");
+    while(!feof(fp)) {
+        current_character = fgetc(fp);
+        if(current_character == '\n')
+            lines;
+    }
+    
+    int i = 0;
+    accounts = (account*)malloc(lines*sizeof(account))
+    
+    // read each line and put into accounts
+    while(i < lines) {
+        fscanf(fp, "%s	%s", accounts[i].id, accounts[i].password);
+        i++;
+    }
+}
+
+bool permit_user(char* user, char* pass)
+{
+     int i = 0;
+     for (i = 0; i < lines; ++i)
+     {
+	  if ((strcmp(accounts[i].id, user) == 0)  && (strcmp(accounts[i].password, pass) == 0))
+	      return true;
+     }
+     
+     return false;
+}
+
 void playGame(int sock, int a, int b, int c)
 {
 	unsigned short buff = 0;
