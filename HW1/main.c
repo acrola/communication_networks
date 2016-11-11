@@ -1,7 +1,9 @@
-#include<stdio.h>
+#include <stdio.h>
+
 int main()
 {
-printf("hello world");
-return 0;
+    printf("hello world");
+    printf("this is a test");
+    return 0;
 }
 
