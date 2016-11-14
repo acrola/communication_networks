@@ -12,8 +12,7 @@
 
 void shutdownSocket(int sock);
 int sendall(int sock, char* buf, int*len);
-int sendMessage(int sock, char letter, unsigned short amount);
-void parseMessage(int sock, unsigned char type, unsigned int nums);
+int sendMessage(int sock, unsigned int operation, unsigned short mail_id);
 int connectToHostname(int sock, char* hostname, char* port);
 void tryClose(int sock);
 int recvall(int sock, char* buf, int*len);
@@ -22,14 +21,6 @@ int main(int argc, char* argv[]){
 	int sock;
 	char* hostname;
 	char* port;
-	/* buff is byte 1 (status byte) in the protocol*/
-	char buff;
-	int len1 = 1;
-	int len2 = 4;
-
-	/* nums is bytes 2-5 (heap size bytes) in the protocol*/
-		unsigned int nums;
-
 	/* place default port if required*/
 	if(argc < 3)
 	{
@@ -50,15 +41,28 @@ int main(int argc, char* argv[]){
 	}
 
 	/* open TCP socket with IPv4*/
-	if((sock = socket(PF_INET, SOCK_STREAM, 0))<0)
+	if((sock = socket(PF_INET, SOCK_STREAM, 0)) < 0)
 	{
 		perror("Could not open socket");
 		exit(errno);
 	}
 	/* connect to server*/
 	connectToHostname(sock, hostname, port);
+	
+	/* get correct input from user*/
+	int inputDone = 0;
+	char input;
+	while(!inputDone)
+	{
+		/* TODO - get from user, username and password correctly, the best way i thought of it is to read char by char*/
+		scanf("%c", &input);
+		//if (...)
+		  //inputDone = 1;
+		/* TODO - if authentication was uncorrect/the input wan't valid- disconnect from the server*/
+	}
 
-	/* read into the buffers*/
+	/* TODO - after connection was established succesfully, get input operations from user, parse correctly and use "sendMessage" function to send to server*/
+	/* TODO - complete reading something from server*/
 	while(((recvall(sock,(char*)&buff,&len1)) == 0) &&
 			((recvall(sock,(char*)&nums,&len2)) == 0))
 	{
@@ -76,26 +80,7 @@ int main(int argc, char* argv[]){
 		parseMessage(sock, buff, nums);
 
 		printf("Your turn:\n");
-
-		/* get correct input from user*/
-		while(!inputDone)
-		{
-			scanf("%c", &c);
-			if(!isalpha(c))
-			{
-				fprintf(stderr, "Error. Please enter a letter\n");
-				continue;
-			}
-			if(c == 'Q')
-			{
-
-				shutdownSocket(sock);
-				exit(0);
-			}
-			scanf(" %i", &num);
-			getchar();
-			inputDone = 1;
-		}
+		
 		/* if number is not in range, send 1023 to make move invalid*/
 		n = (num > 0 && num <= 1000)? (unsigned short)num : 0x3FF;
 		/* try to send the message*/
@@ -119,30 +104,9 @@ int main(int argc, char* argv[]){
 	return 0;
 	}
 
-int sendMessage(int sock, char letter, unsigned short amount)
+int sendMessage(int sock, unsigned int operation, unsigned short mail_id)
 {
-	int len = 2;/* size of short*/
-	if(letter == 'A')
-	{
-		/* 01xxxxaa aaaaaaaa*/
-		amount = amount | 0x4000;
-	}
-	else if (letter == 'B')
-	{
-		/* 10xxxxaa aaaaaaaa*/
-		amount = amount | 0x8000;
-	}
-	else if (letter == 'C')
-	{
-		/* 11xxxxaa aaaaaaaa*/
-		amount = amount | 0xC000;
-	}
-	else
-	{
-		/* 00xxxxaa aaaaaaaa*/
-		amount = amount & 0x3FFF;
-	}
-	return sendall(sock, ((char*)&amount), &len);
+	/* TODO - implement with protocol I did in the server*/
 }
 int sendall(int sock, char* buf, int*len)
 {
@@ -159,39 +123,7 @@ int sendall(int sock, char* buf, int*len)
 	*len = total; /* return number actually sent here */
 	return n == -1 ? -1:0; /*-1 on failure, 0 on success */
 }
-void parseMessage(int sock, unsigned char type, unsigned int nums)
-{
-	unsigned short a,b,c;
-	if(!(type & 0x80))
-	{
-		/* not initial*/
-		if(type & 0x40)
-		{
-			printf("Move accepted\n");
-		}
-		else
-		{
-			printf("Illegal move\n");
-		}
-	}
-	
-	a = (nums >> 20) & 0x3FF;
-	b = (nums >> 10) & 0x3FF;
-	c = nums & 0x3FF;
-	printf("Heap A: %i\nHeap B: %i\nHeap C: %i\n", a, b, c);
-	if(type & 0x20)
-	{
-		printf("Server win!\n");
-		tryClose(sock);
-		exit(0);
-	}
-	else if(type & 0x10)
-	{
-		printf("You win!\n");
-		tryClose(sock);
-		exit(0);
-	}
-}
+
 int connectToHostname(int sock, char* hostname, char* port)
 {
 	const char separator[2] = " ";

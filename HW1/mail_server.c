@@ -10,25 +10,32 @@
 #include <ctype.h>
 #include <stdbool.h>
 
+#define MAILS 32000
+
 struct account {
-    char *id; 
-    char *password;
+    char* id; 
+    char* password;
+    char* mails[MAILS];
 };
 
 account* accounts;
-int lines;
+int users_num;
+account* curr_account;
 
 int isInt(char* str);
 int sendall(int sock, char* buf, int* len);
-void playGame(int sock, int a, int b, int c);
-int sendState(int sock,int initial, int accept, int winLose, int a, int b, int c);
-void doServerTurn(int sock, int* a, int* b, int* c);
-int testWin(int a, int b, int c);
 void shutdownSocket(int sock);
 void tryClose(int sock);
 int recvall(int sock, char* buf, int*len);
 void read_file(char* path);
-bool permit_user(char* user, char* pass)
+bool permit_user(char* user, char* pass);
+void parseMessage(int sock, unsigned char type, unsigned int nums);
+void serverLoop(int sock);
+void show_inbox_operation(int sock);
+void quit_operation(int sock);
+void compose_operation(int sock);
+void get_mail_operation(int sock, int mail_id);
+void delete_mail_operation(int sock, int mail_id);
 
 int main(int argc, char* argv[]) {
 	char* port;
@@ -57,6 +64,8 @@ int main(int argc, char* argv[]) {
 	{
 		port = "6423";
 	}
+	
+	read_file(path);
 
 	/* open IPv4 TCP socket*/
 	if((sock = socket(PF_INET, SOCK_STREAM, 0)) < 0)
@@ -90,41 +99,39 @@ int main(int argc, char* argv[]) {
 	/* by this point we have a connection. play the game*/
 	/* we can close the listening socket and play with the active socket*/
 	tryClose(sock);
-	read_file(path);
 	/* send welcome message to the client*/
 	char connection_msg[] = "Welcome! I am simple-mail-server.\n";
 	sendall(new_sock,connection_msg, sizeof(char)*strlen(connection_msg));
 	/* server's logic*/
-	playGame(new_sock, a, b, c);
+	serverLoop(new_sock);
 	return 0;
 }
 
 void read_file(char* path)
 {
     FILE* fp;
-    lines = 0;   // count how many lines are in the file
+    users_num = 0;   // count how many lines are in the file
     int current_character;
     fp = fopen(path, "r");
     while(!feof(fp)) {
         current_character = fgetc(fp);
         if(current_character == '\n')
-            lines;
+            users_num++;
     }
     
-    int i = 0;
-    accounts = (account*)malloc(lines*sizeof(account))
+    int i;
+    accounts = (account*)malloc(users_num * sizeof(account));
     
     // read each line and put into accounts
-    while(i < lines) {
+    for (i = 0; i < users_num; i++){
         fscanf(fp, "%s	%s", accounts[i].id, accounts[i].password);
-        i++;
     }
 }
 
 bool permit_user(char* user, char* pass)
 {
      int i = 0;
-     for (i = 0; i < lines; ++i)
+     for (i = 0; i < users_num; ++i)
      {
 	  if ((strcmp(accounts[i].id, user) == 0)  && (strcmp(accounts[i].password, pass) == 0))
 	      return true;
@@ -133,13 +140,11 @@ bool permit_user(char* user, char* pass)
      return false;
 }
 
-void playGame(int sock, int a, int b, int c)
+void serverLoop(int sock)
 {
+	/* TODO - complete client's user authentication*/
 	unsigned short buff = 0;
-	int* choice = 0;
 	int len = 2;
-	/* start by sending the initial state of the game*/
-	sendState(sock, 1, 0, 0, a, b, c);
 	/* get client reply in a short*/
 	while(recvall(sock, ((char*)&buff), &len) == 0)
 	{
@@ -155,7 +160,7 @@ void playGame(int sock, int a, int b, int c)
 		/* split the two parts of the client message*/
 		letter = buff & 0xC000;
 		num = buff & 0x3FFF;
-		/* if letter == 0 then there was some error in the client. reject the move*/
+		/* if letter == 0 then there was some error in the client. reject the operation*/
 		if(letter == 0)
 		{
 			accepted = 0;
@@ -165,47 +170,32 @@ void playGame(int sock, int a, int b, int c)
 			/* choose the choice based on letter, as per protocol specification*/
 			switch(letter)
 			{
+			/* SHOW_INBOX, QUIT or COMPOSE operation*/ 
 			case 0x4000:
-				choice = &a;
+				/* SHOW_INBOX:*/
+				if (num & 0x1)
+				      show_inbox_operation(sock);
+				/* QUIT:*/
+				else if (num & 0x2)
+				      quit_operation(sock); //	should probably perform shutdownSocket(sock);
+				/* COMPOSE:*/
+				else if (num & 0x3)
+				      compose_operation(sock);
 				break;
+			/* GET_MAIL operation*/
 			case 0x8000:
-				choice = &b;
+				get_mail_operation(sock, num - 1);
 				break;
+			/* DELETE_MAIL operation*/
 			case 0xC000:
-				choice = &c;
+				delete_mail_operation(sock, num - 1);
 				break;
 			}
 			/* if out of range, reject*/
-			if(num > *choice || num > 1000 || num <= 0)
+			if(num > MAILS || num <= 0)
 			{
 				accepted = 0;
 			}
-			else
-			{
-				/* if in range, remove from choice*/
-				*choice -= num;
-				/* test if user won. if yes, send win message and shutdown the sockets*/
-				if(testWin(a,b,c))
-				{
-					sendState(sock, 0, accepted, 1, a, b, c);
-					shutdownSocket(sock);
-					break;
-				}
-			}
-		}
-		/* if the client didnt win, do a server turn*/
-		doServerTurn(sock, &a, &b, &c);
-		/* test if the server won. if yes, send message and shutdown the socket*/
-		if(testWin(a,b,c))
-		{
-			sendState(sock, 0, accepted, 2, a, b, c);
-			shutdownSocket(sock);
-			break;
-		}
-		else
-		{
-			/* otherwise just send a status message*/
-			sendState(sock, 0, accepted, 0, a, b, c);
 		}
 	}
 	if(len != 0 && len != 2)
@@ -258,56 +248,10 @@ int recvall(int sock, char* buf, int*len)
 	*len = total; /* return number actually sent here */
 	return n == -1 ? -1:0; /*-1 on failure, 0 on success */
 }
-int sendState(int sock,int initial, int accept, int winLose, int a, int b, int c)
-{
-	/* sets the type char bits, as per protocol specification*/
-	unsigned char type =
-			type = (initial << 7) + (accept << 6) + (winLose << 4);
-	/* puts all 3 heap sizes in one uint as per protocol specification*/
-	unsigned int nums =
-			(a << 20) + (b<<10) + c;
-	int len1 = sizeof(unsigned char), len2 = sizeof(unsigned int);
-	/* send char*/
-	if(sendall(sock, ((char*)&type), &len1) < 0)
-	{
-		perror("Error sending message");
-		tryClose(sock);
-		exit(errno);
-	}
-	/* send nums*/
-	if(sendall(sock, (char*)&nums, &len2) < 0)
-	{
-		perror("Error sending message");
-		tryClose(sock);
-		exit(errno);
-	}
-	return 0;
-}
-int testWin(int a, int b, int c)
-{
-	/* tests if this is a winning setup*/
-	return a == 0 && b == 0 && c == 0;
-}
-void doServerTurn(int sock, int* a, int* b, int* c)
-{
-	/* removes one from the highest heap, or the first lexicographically if there are ties*/
-	if(*a >= *b && *a >= *c)
-	{
-		(*a)--;
-	}
-	else if(*b >= *a && *b >= *c)
-	{
-		(*b)--;
-	}
-	else
-	{
-		(*c)--;
-	}
-}
 
 void tryClose(int sock)
 {
-	if(close(sock) <0)
+	if(close(sock) < 0)
 	{
 		perror("Could not close socket");
 		exit(errno);
