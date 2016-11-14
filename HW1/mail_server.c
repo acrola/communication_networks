@@ -149,7 +149,7 @@ void serverLoop(int sock)
 	while(recvall(sock, ((char*)&buff), &len) == 0)
 	{
 		int accepted = 1;
-		unsigned short letter;
+		unsigned short op;
 		unsigned short num;
 		if(len != 2)
 		{
@@ -158,17 +158,17 @@ void serverLoop(int sock)
 			exit(errno);
 		}
 		/* split the two parts of the client message*/
-		letter = buff & 0xC000;
+		op = buff & 0xC000;
 		num = buff & 0x3FFF;
-		/* if letter == 0 then there was some error in the client. reject the operation*/
-		if(letter == 0)
+		/* if op == 0 then there was some error in the client. reject the operation*/
+		if(op == 0)
 		{
 			accepted = 0;
 		}
 		else
 		{
-			/* choose the choice based on letter, as per protocol specification*/
-			switch(letter)
+			/* choose the choice based on op, as per protocol specification*/
+			switch(op)
 			{
 			/* SHOW_INBOX, QUIT or COMPOSE operation*/ 
 			case 0x4000:
