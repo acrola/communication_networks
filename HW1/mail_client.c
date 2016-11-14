@@ -253,6 +253,7 @@ int connectToHostname(int sock, char* hostname, char* port)
 		perror("Could not connect to server");
 		exit(errno);
 	}
+	printf("Connected to server\n");
 	return 0;
 }
 void tryClose(int sock)

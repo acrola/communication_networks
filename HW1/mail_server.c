@@ -91,6 +91,10 @@ int main(int argc, char* argv[]) {
 	/* we can close the listening socket and play with the active socket*/
 	tryClose(sock);
 	read_file(path);
+	/* send welcome message to the client*/
+	char connection_msg[] = "Welcome! I am simple-mail-server.\n";
+	sendall(new_sock,connection_msg, sizeof(char)*strlen(connection_msg));
+	/* server's logic*/
 	playGame(new_sock, a, b, c);
 	return 0;
 }
