@@ -199,14 +199,18 @@ int connectToHostname(int sock, char* hostname, char* port)
 	
 	char username_line[256];
 	char* username;
-	if (fgets(user_line, sizeof(user_line), stdin)) {
+	if (!fgets(user_line, sizeof(user_line), stdin)) {
+	      printf("Error reading username, probably too long.\n");
+	      exit(1);
 	}
 	token = strtok(user_line, separator);
 	username = strtok(NULL, separator);
 
 	char password_line[256];
 	char* password;
-	if (fgets(password_line, sizeof(password_line), stdin)) {
+	if (!fgets(password_line, sizeof(password_line), stdin)) {
+	      printf("Error reading password, probably too long.\n");
+	      exit(1);
 	}
 	token = strtok(password_line, separator);
 	password = strtok(NULL, separator);
