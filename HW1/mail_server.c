@@ -18,8 +18,8 @@ struct account {
 account* accounts;
 int lines;
 
-int isInt(char *);
-int sendall(int sock, char* buf, int*len);
+int isInt(char* str);
+int sendall(int sock, char* buf, int* len);
 void playGame(int sock, int a, int b, int c);
 int sendState(int sock,int initial, int accept, int winLose, int a, int b, int c);
 void doServerTurn(int sock, int* a, int* b, int* c);
@@ -211,7 +211,7 @@ void playGame(int sock, int a, int b, int c)
 	tryClose(sock);
 	exit(0);
 }
-int isInt(char *str)
+int isInt(char* str)
 {
 	/* tests if a string is just numbers*/
 	if(*str == 0)
@@ -224,7 +224,7 @@ int isInt(char *str)
 	}
 	return 1;
 }
-int sendall(int sock, char* buf, int*len)
+int sendall(int sock, char* buf, int* len)
 {
 	/* sendall code as seen in recitation*/
 	int total = 0; /* how many bytes we've sent */
