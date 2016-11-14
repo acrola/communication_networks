@@ -33,7 +33,7 @@ int main(int argc, char* argv[]){
 	/* place default port if required*/
 	if(argc < 3)
 	{
-		port = "6444";
+		port = "6423";
 	}
 	else
 	{
@@ -194,6 +194,23 @@ void parseMessage(int sock, unsigned char type, unsigned int nums)
 }
 int connectToHostname(int sock, char* hostname, char* port)
 {
+	const char separator[2] = " ";
+	char *token;
+	
+	char username_line[256];
+	char* username;
+	if (fgets(user_line, sizeof(user_line), stdin)) {
+	}
+	token = strtok(user_line, separator);
+	username = strtok(NULL, separator);
+
+	char password_line[256];
+	char* password;
+	if (fgets(password_line, sizeof(password_line), stdin)) {
+	}
+	token = strtok(password_line, separator);
+	password = strtok(NULL, separator);
+	
 	int rv;
 	struct addrinfo hints, *servinfo, *p;
 	struct sockaddr_in *h;
