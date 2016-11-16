@@ -25,11 +25,13 @@ typedef struct mail {
     unsigned int recipients_num;
     char* mail_subject;
     char* mail_body;
+    unsigned int mail_id;
 } mail;
 
 account* accounts;
-mail mails[MAILS_COUNT];
-int users_num;
+mail* mails[MAILS_COUNT];
+unsigned int accounts_num;
+unsigned int mails_num;
 account* curr_account;
 
 int isInt(char* str);
@@ -41,6 +43,11 @@ void read_file(char* path);
 bool permit_user(char* user, char* pass);
 void parseMessage(int sock, unsigned char type, unsigned int nums);
 void serverLoop(int sock);
+bool lookForMailInInbox(account* acc, unsigned int mail_id);
+bool addMailToInbox(account* recipient, unsigned int mail_id);
+bool composeNewMail(account* sender, account** recipients, unsigned int recipients_num, char* mail_subject, char* mail_body);
+bool deleteMailFromInbox(account* acc, unsigned int mail_id);
+
 void show_inbox_operation(int sock);
 void quit_operation(int sock);
 void compose_operation(int sock);
@@ -48,6 +55,7 @@ void get_mail_operation(int sock, int mail_id);
 void delete_mail_operation(int sock, int mail_id);
 
 int main(int argc, char* argv[]) {
+	mails_num = 0;
 	char* port;
 	char* path;
 	int sock, new_sock;
@@ -134,7 +142,7 @@ void read_file(char* path)
     
     // read each line and put into accounts
     for (i = 0; i < users_num; i++){
-        fscanf(fp, "%s	%s", accounts[i].id, accounts[i].password);
+        fscanf(fp, "%s\t%s", accounts[i].id, accounts[i].password);
     }
 }
 
@@ -153,23 +161,23 @@ bool permit_user(char* user, char* pass)
 void serverLoop(int sock)
 {
 	/* TODO - complete client's user authentication*/
-	unsigned short buff = 0;
-	int len = 2;
-	/* get client reply in a short*/
-	while(recvall(sock, ((char*)&buff), &len) == 0)
+	long buff = 0;
+	int len = 4;
+	/* get client reply*/
+	while(recvall(sock, ((long*)&buff), &len) == 0)
 	{
 		int accepted = 1;
-		unsigned short op;
-		unsigned short num;
-		if(len != 2)
+		long op;
+		long num;
+		if(len != 4)
 		{
 			perror("Error receiving data from client");
 			tryClose(sock);
 			exit(errno);
 		}
 		/* split the two parts of the client message*/
-		op = buff & 0xC000;
-		num = buff & 0x3FFF;
+		op = buff & 0xE00000;
+		num = buff & 0xFFFF;
 		/* if op == 0 then there was some error in the client. reject the operation*/
 		if(op == 0)
 		{
@@ -177,38 +185,41 @@ void serverLoop(int sock)
 		}
 		else
 		{
-			/* choose the choice based on op, as per protocol specification*/
-			switch(op)
-			{
-			/* SHOW_INBOX, QUIT or COMPOSE operation*/ 
-			case 0x4000:
-				/* SHOW_INBOX:*/
-				if (num & 0x1)
-				      show_inbox_operation(sock);
-				/* QUIT:*/
-				else if (num & 0x2)
-				      quit_operation(sock); //	should probably perform shutdownSocket(sock);
-				/* COMPOSE:*/
-				else if (num & 0x3)
-				      compose_operation(sock);
-				break;
-			/* GET_MAIL operation*/
-			case 0x8000:
-				get_mail_operation(sock, num - 1);
-				break;
-			/* DELETE_MAIL operation*/
-			case 0xC000:
-				delete_mail_operation(sock, num - 1);
-				break;
-			}
-			/* if out of range, reject*/
-			if(num > MAILS_COUNT || num <= 0)
+		  	/* if out of range, reject*/
+			if (num > MAILS_COUNT || num <= 0)
 			{
 				accepted = 0;
+				
+			}
+			else {
+				/* choose the choice based on op, as per protocol specification*/
+				switch(op)
+				{
+					/* SHOW_INBOX operation*/
+					case 0x200000:
+						show_inbox_operation(sock);
+						break;
+					/* GET_MAIL operation*/
+					case 0x400000:
+						get_mail_operation(sock, (unsigned short)num - 1);
+						break;
+					/* DELETE_MAIL operation*/
+					case 0x600000:
+						delete_mail_operation(sock, (unsigned short)num - 1);
+						break;
+					/* QUIT operation*/
+					case 0x800000:
+						quit_operation(sock);
+						break;
+					/* COMPOSE operation*/
+					case 0xA00000:
+						compose_operation(sock);
+						break;
+				}
 			}
 		}
 	}
-	if(len != 0 && len != 2)
+	if(len != 0 && len != 4)
 	{
 		perror("Error receiving data from client");
 	}
@@ -290,3 +301,46 @@ void shutdownSocket(int sock)
 	tryClose(sock);
 	exit(0);
 }
+
+int lookForMailInInbox(account* acc, unsigned int mail_id){
+	int i;
+	for (i = 0; i < acc->inbox_size; i++){
+		if (acc->inbox_mail_indices[i] != NULL)
+			if (acc->inbox_mail_indices[i] == mail_id)
+				return i;
+	}
+	return 32000;
+}
+
+bool addMailToInbox(account* recipient, unsigned int mail_id){
+	recipient->inbox_size = recipient->inbox_size + 1;
+	acc->inbox_mail_indices = (unsigned short *)realloc(inbox_size);
+	acc->inbox_mail_indices[inbox_size - 1] = mail_id;
+}
+
+bool composeNewMail(account* sender, account** recipients, unsigned int recipients_num, char* mail_subject, char* mail_body){
+	int success = 1;
+	mails_num++;
+	mail* new_mail = (mail *)malloc(sizeof(mail));
+	new_mail->sender = sender;
+	new_mail->recipients = recipients;
+	new_mail->recipients_num = recipients_num;
+	new_mail->mail_subject = mail_subject;
+	new_mail->mail_body = mail_body;
+	new_mail->mail_id = mails_num - 1;
+	mails[mails_num - 1] = new_mail;
+	int i;
+	for (i = 0; i < recipients_num; i++){
+		success *= addMailToInbox(recipients[i], new_mail->mail_id);
+	}
+	return success;
+}
+
+bool deleteMailFromInbox(account* acc, unsigned int mail_id){
+	int i = lookForMailInInbox(acc, mail_id);
+	if (i == 32000)
+		return false;
+	acc->inbox_mail_indices[i] = NULL;
+	return true;
+}
+
