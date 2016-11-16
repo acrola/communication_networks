@@ -27,7 +27,7 @@ int main(int argc, char* argv[]){
 		port = "6423";
 	}
 	else
-	{
+	{	
 		port = argv[2];
 	}
 	/* place default hostname if required*/
@@ -46,8 +46,6 @@ int main(int argc, char* argv[]){
 		perror("Could not open socket");
 		exit(errno);
 	}
-	/* connect to server*/
-	connectToHostname(sock, hostname, port);
 	
 	/* get correct input from user*/
 	int inputDone = 0;
@@ -60,6 +58,9 @@ int main(int argc, char* argv[]){
 		  //inputDone = 1;
 		/* TODO - if authentication was uncorrect/the input wan't valid- disconnect from the server*/
 	}
+
+	/* connect to server*/
+	connectToHostname(sock, hostname, port);
 
 	/* TODO - after connection was established succesfully, get input operations from user, parse correctly and use "sendMessage" function to send to server*/
 	/* TODO - complete reading something from server*/
@@ -76,10 +77,7 @@ int main(int argc, char* argv[]){
 			tryClose(sock);
 			exit(errno);
 		}
-		/* parse and print message*/
-		parseMessage(sock, buff, nums);
 
-		printf("Your turn:\n");
 		
 		/* if number is not in range, send 1023 to make move invalid*/
 		n = (num > 0 && num <= 1000)? (unsigned short)num : 0x3FF;

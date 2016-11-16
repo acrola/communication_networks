@@ -43,7 +43,7 @@ int main(int argc, char* argv[]) {
 	int sock, new_sock;
 	socklen_t sin_size;
 	struct sockaddr_in myaddr, their_addr;
-	if(argc < 2 || argc > 3)
+	if(argc > 3)
 	{
 		printf("Incorrect Argument Count");
 		exit(1);
