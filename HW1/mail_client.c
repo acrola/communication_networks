@@ -10,9 +10,6 @@
 #include <errno.h>
 #include <ctype.h>
 
-#define MAX_HOSTNAME_LENGTH 100
-#define MAX_PORT_LENGTH 10
-
 typedef enum _eOpCode
 {
     OPCODE_SHOW_INBOX 0x200000,
@@ -38,23 +35,9 @@ int recvall(int sock, char *buf, int *len);
 int main(int argc, char *argv[])
 {
     int sock;
-    char hostname[MAX_HOSTNAME_LENGTH] = {0};
-    char port[MAX_PORT_LENGTH] = {0};
-    switch (argc)
-    {
-        case 1:
-            strcpy(hostname, "localhost");
-            break;
-        case 3:
-            strcpy(port, argv[2]);
-        case 2:
-            strcpy(hostname, argv[1]);
-            break;
-        default:
-            printf("Incorrect Argument Count");
-            exit(EXIT_FAILURE);
+    char *hostname;
+    char *port;
 
-    }
     /*exit in case of incorrect argument count*/
     if (argc > 3)
     {
@@ -64,21 +47,21 @@ int main(int argc, char *argv[])
     /* place default hostname if required*/
     if (argc == 1)
     {
-        strcpy(hostname, "localhost");
+        hostname = "localhost";
     }
     else
     {
-        strcpy(hostname, argv[1]);
+        hostname = argv[1];
     }
 
     /* place default port if required*/
     if (argc < 3)
     {
-        strcpy(port, "6423");
+        port = "6423";
     }
     else
     {
-        strcpy(port, argv[2]);
+        port = argv[2];
     }
 
 
