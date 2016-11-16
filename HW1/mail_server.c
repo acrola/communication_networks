@@ -10,15 +10,22 @@
 #include <ctype.h>
 #include <stdbool.h>
 
-#define MAILS 32000
+#define MAILS_COUNT 32000
 
-struct account {
+typedef struct account {
     char* id; 
     char* password;
-    char* mails[MAILS];
-};
+} account;
+
+typedef struct mail {
+    account* sender; 
+    account** recipients;
+    char* mail_body;
+    char* mail_subject;
+} mail;
 
 account* accounts;
+mail mails[MAILS_COUNT];
 int users_num;
 account* curr_account;
 
@@ -192,7 +199,7 @@ void serverLoop(int sock)
 				break;
 			}
 			/* if out of range, reject*/
-			if(num > MAILS || num <= 0)
+			if(num > MAILS_COUNT || num <= 0)
 			{
 				accepted = 0;
 			}
