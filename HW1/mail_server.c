@@ -58,8 +58,7 @@ bool lookForMailInInbox(account *acc, unsigned int mail_id);
 
 bool addMailToInbox(account *recipient, unsigned int mail_id);
 
-bool
-composeNewMail(account *sender, account **recipients, unsigned int recipients_num, char *mail_subject, char *mail_body);
+bool composeNewMail(account *sender, account **recipients, unsigned int recipients_num, char *mail_subject, char *mail_body);
 
 bool deleteMailFromInbox(account *acc, unsigned int mail_id);
 
@@ -191,8 +190,8 @@ void serverLoop(int sock)
     while (recvall(sock, ((long *) &buff), &len) == 0)
     {
         int accepted = 1;
-        long op;
-        long num;
+        unsigned long op;
+        unsigned long num;
         if (len != 4)
         {
             perror("Error receiving data from client");
