@@ -15,13 +15,16 @@
 typedef struct account {
     char* id; 
     char* password;
+    unsigned short* inbox_mail_indices;
+    unsigned short inbox_size;
 } account;
 
 typedef struct mail {
     account* sender; 
     account** recipients;
-    char* mail_body;
+    unsigned int recipients_num;
     char* mail_subject;
+    char* mail_body;
 } mail;
 
 account* accounts;
