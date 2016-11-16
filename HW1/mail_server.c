@@ -125,7 +125,7 @@ int main(int argc, char* argv[]) {
 	return 0;
 }
 
-void read_file(char* path)
+bool read_file(char* path)
 {
     FILE* fp;
     users_num = 0;   // count how many lines are in the file
@@ -139,11 +139,13 @@ void read_file(char* path)
     
     int i;
     accounts = (account*)malloc(users_num * sizeof(account));
-    
+    if (accounts == NULL)
+	return false;
     // read each line and put into accounts
     for (i = 0; i < users_num; i++){
         fscanf(fp, "%s\t%s", accounts[i].id, accounts[i].password);
     }
+    return true;
 }
 
 bool permit_user(char* user, char* pass)
@@ -314,14 +316,22 @@ int lookForMailInInbox(account* acc, unsigned int mail_id){
 
 bool addMailToInbox(account* recipient, unsigned int mail_id){
 	recipient->inbox_size = recipient->inbox_size + 1;
-	acc->inbox_mail_indices = (unsigned short *)realloc(inbox_size);
-	acc->inbox_mail_indices[inbox_size - 1] = mail_id;
+	recipient->inbox_mail_indices = (unsigned short *)realloc(inbox_size*sizeof(unsigned short));
+	if (recipient->inbox_mail_indices == NULL)
+		return false;
+	recipient->inbox_mail_indices[inbox_size - 1] = mail_id;
+	return true;
 }
 
 bool composeNewMail(account* sender, account** recipients, unsigned int recipients_num, char* mail_subject, char* mail_body){
 	int success = 1;
-	mails_num++;
 	mail* new_mail = (mail *)malloc(sizeof(mail));
+	
+	if (new_mail == NULL)
+		  return false;
+	
+	mails_num++;
+	
 	new_mail->sender = sender;
 	new_mail->recipients = recipients;
 	new_mail->recipients_num = recipients_num;
@@ -343,4 +353,3 @@ bool deleteMailFromInbox(account* acc, unsigned int mail_id){
 	acc->inbox_mail_indices[i] = NULL;
 	return true;
 }
-
