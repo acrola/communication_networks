@@ -30,6 +30,22 @@ typedef struct mail
     unsigned int mail_id;
 } mail;
 
+typedef enum _eOpCode
+{
+    OPCODE_SHOW_INBOX 0x200000,
+    OPCODE_GET_MAIL 0x400000,
+    OPCODE_DELETE_MAIL 0x600000,
+    OPCODE_QUIT 0x800000,
+    OPCODE_COMPOSE 0xA00000
+} eOpCode;
+
+typedef enum _eMasks
+{
+    MASK_GET_OPCODE 0xE00000,
+    MASK_GET_CLIENT_ID 0xFFFF
+} eMasks;
+
+
 account *accounts;
 mail *mails[MAILS_COUNT];
 unsigned int accounts_num;
@@ -191,7 +207,7 @@ void serverLoop(int sock)
     {
         int accepted = 1;
         unsigned long op;
-        unsigned long num;
+        unsigned long client_id;
         if (len != 4)
         {
             perror("Error receiving data from client");
@@ -199,8 +215,8 @@ void serverLoop(int sock)
             exit(errno);
         }
         /* split the two parts of the client message*/
-        op = buff & 0xE00000;
-        num = buff & 0xFFFF;
+        op = buff & eMask.MASK_GET_OPCODE;
+        client_id = buff & eMask.MASK_GET_CLIENT_ID;
         /* if op == 0 then there was some error in the client. reject the operation*/
         if (op == 0)
         {
@@ -208,7 +224,7 @@ void serverLoop(int sock)
         } else
         {
             /* if out of range, reject*/
-            if (num > MAILS_COUNT || num <= 0)
+            if (client_id > MAILS_COUNT || client_id <= 0)
             {
                 accepted = 0;
 
@@ -218,23 +234,23 @@ void serverLoop(int sock)
                 switch (op)
                 {
                     /* SHOW_INBOX operation*/
-                    case 0x200000:
+                    case eOpCode.OPCODE_SHOW_INBOX:
                         show_inbox_operation(sock);
                         break;
                         /* GET_MAIL operation*/
-                    case 0x400000:
-                        get_mail_operation(sock, (unsigned short) num - 1);
+                    case eOpCode.OPCODE_GET_MAIL:
+                        get_mail_operation(sock, (unsigned short) client_id - 1);
                         break;
                         /* DELETE_MAIL operation*/
-                    case 0x600000:
-                        delete_mail_operation(sock, (unsigned short) num - 1);
+                    case eOpCode.OPCODE_DELETE_MAIL:
+                        delete_mail_operation(sock, (unsigned short) client_id - 1);
                         break;
                         /* QUIT operation*/
-                    case 0x800000:
+                    case eOpCode.OPCODE_QUIT:
                         quit_operation(sock);
                         break;
                         /* COMPOSE operation*/
-                    case 0xA00000:
+                    case eOpCode.OPCODE_COMPOSE:
                         compose_operation(sock);
                         break;
                 }
