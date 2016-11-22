@@ -10,33 +10,48 @@
 #include <ctype.h>
 #include <unistd.h>
 
-#define BUF_SIZE 256
+#define BUF_SIZE 4096
+#define MAX_USERNAME_LENGTH 32
+#define MAX_PASSWORD_LENGTH 32
+#define MAX_INPUT_ATTEMPTS 3
 
 typedef enum _eOpCode
 {
-    OPCODE_SHOW_INBOX 0x200000,
-    OPCODE_GET_MAIL 0x400000,
-    OPCODE_DELETE_MAIL 0x600000,
-    OPCODE_QUIT 0x800000,
-    OPCODE_COMPOSE 0xA00000
+    OPCODE_SHOW_INBOX = 1,
+    OPCODE_GET_MAIL = 2,
+    OPCODE_DELETE_MAIL  = 3,
+    OPCODE_COMPOSE = 4,
+    OPCODE_QUIT  = 5
 } eOpCode;
 
 
 void shutdownSocket(int sock);
 
-int sendall(int sock, char *buf, int *len);
+int sendall(int sock, void *buf, int *len);
 
 int sendMessage(int sock, unsigned int operation, unsigned short mail_id);
 
-int connectToServer(int sockfd, char *hostname, char *port);
+void connectToServer(int sockfd, char *hostname, char *port);
 
 void tryClose(int sock);
 
-int recvall(int sock, char *buf, int *len);
+int recvall(int sock, void *buf, int *len);
 
 void analyzeProgramArguments(int argc, char *argv[], char **hostname, char **port);
 
-void getAndSendUserDetails(int sockfd);
+void validateUser(int sockfd);
+
+void establishInitialConnection(int sockfd, char *hostname, char *port);
+
+void recvData(int sockfd, char *buf);
+
+void trySysCall(int syscallResult, const char *msg);
+
+void validateUser(int sockfd);
+
+void sendData(int sockfd, char *buf);
+
+void getInputFromUser(char *fieldBuf, const char *fieldPrefix, const char *fieldName, int maxFieldLength);
 
 int main(int argc, char *argv[])
 {
@@ -120,7 +135,7 @@ int sendMessage(int sock, unsigned int operation, unsigned short mail_id)
     return 0;
 }
 
-int sendall(int sock, char *buf, int *len)
+int sendall(int sock, void *buf, int *len)
 {
     /* sendall code as seen in recitation*/
     int total = 0; /* how many bytes we've sent */
@@ -140,11 +155,8 @@ int sendall(int sock, char *buf, int *len)
     return n == -1 ? -1 : 0; /*-1 on failure, 0 on success */
 }
 
-int connectToServer(int sockfd, char *hostname, char *port)
+void connectToServer(int sockfd, char *hostname, char *port)
 {
-
-
-
     //struct sockaddr_in *h;
     //struct sockaddr_in dest_addr;
 
@@ -153,11 +165,26 @@ int connectToServer(int sockfd, char *hostname, char *port)
 //    /* write server port*/
 //    dest_addr.sin_port = htons((short) strtol(port, NULL, 10));
 
+    char buf[BUF_SIZE];
 
+    //establish the initial connection with the server
+    establishInitialConnection(sockfd, hostname, port);
+    //The client needs to recieve the server's welcome message
+    recvData(sockfd, buf);
+    //print welcome message
+    printf("%s", buf);
+    /*now the client takes username and password from the user and validates then with the server:*/
+    validateUser(sockfd);
+    // if we got here - connection succeeded
+    printf("Connected to server\n");
+}
+
+
+
+void establishInitialConnection(int sockfd, char *hostname, char *port)
+{
     int rv;
     struct addrinfo hints, *servinfo, *p;
-    char buf[BUF_SIZE] = {0};
-
 
     /* zero hints struct*/
     memset(&hints, 0, sizeof(hints));
@@ -195,54 +222,9 @@ int connectToServer(int sockfd, char *hostname, char *port)
     }
     /*free the servinfo struct - we're done with it"*/
     freeaddrinfo(servinfo);
-
-    /* The initial connection has been established.
-     * The client needs to recieve the server's welcome message:*/
-    //todo - needs to be changed. not robust enouge (what if the welcome message is changed?)
-    int msg_length = sizeof(char) * strlen("Welcome! I am simple-mail-server.\n");
-    recvall(sockfd, buf, &msg_length);
-    printf("%s", buf);
-
-    /*now the client takes input from the user and sends it to the server:*/
-    getAndSendUserDetails(sockfd);
-
-
-    printf("Connected to server\n");
-    return 0;
 }
 
-void getAndSendUserDetails(int sockfd)
-{
-    const char delimiters[] = " \t\n";
-    char *token, input[BUF_SIZE] = {0}, username[BUF_SIZE] = {0}, password[BUF_SIZE] = {0};
-    char sendBuf[(BUF_SIZE*2)+1];
 
-    printf("User: ");
-    if (!fgets(input, BUF_SIZE, stdin))
-    {
-        printf("Error - reading username failed\n");
-        exit(EXIT_FAILURE);
-    }
-    token = strtok(input, delimiters);
-    strcpy(username, token);
-
-    memset(input, 0, BUF_SIZE);
-    printf("Password: ");
-    if (!fgets(input, BUF_SIZE, stdin))
-    {
-        printf("Error - reading password failed\n");
-        exit(EXIT_FAILURE);
-    }
-    token = strtok(input, delimiters);
-    strcpy(password, token);
-    //copy the data to sendBuf in the form of <username>\t<password>
-    strcpy(sendBuf, username);
-    strcat(sendBuf, "\t");
-    strcat(sendBuf, password);
-    int bytesToSend = strlen(sendBuf);
-    //send the usernameand password
-    sendall(sockfd, sendBuf, &bytesToSend);
-}
 
 void tryClose(int sock)
 {
@@ -253,7 +235,7 @@ void tryClose(int sock)
     }
 }
 
-int recvall(int sock, char *buf, int *len)
+int recvall(int sock, void *buf, int *len)
 {
     int total = 0; /* how many bytes we've read */
     int bytesleft = *len; /* how many we have left to read */
@@ -329,23 +311,132 @@ void analyzeProgramArguments(int argc, char **argv, char **hostname, char **port
     {
         *port = argv[2];
     }
+}
 
-    /*
-    else
+void trySysCall(int syscallResult, const char *msg)
+{
+    if(syscallResult < 0)
     {
-        //TODO - needs code review to see if we really catch everything..
-        char *temp;
-        long tempPort = strtol(argv[2], &temp, 10);
-        //check if error occurred during the conversion
-        if (temp == argv[2] || *temp != '\0' || ((tempPort == LONG_MIN || tempPort == LONG_MAX)&& errno == ERANGE))
+        perror(msg);
+        exit(EXIT_FAILURE);
+    }
+}
+
+void validateUser(int sockfd)
+{
+    int attemptsLeft = MAX_INPUT_ATTEMPTS;
+    char buf[BUF_SIZE], username[MAX_USERNAME_LENGTH], password[MAX_PASSWORD_LENGTH];
+    char serverAnswer;
+    do
+    {
+        //zero all buffers
+        memset(buf, 0, BUF_SIZE);
+        memset(username, 0, MAX_USERNAME_LENGTH);
+        memset(password, 0, MAX_PASSWORD_LENGTH);
+        serverAnswer = 0;
+
+        //get username and password from user
+        getInputFromUser(username, "User:", "username", MAX_USERNAME_LENGTH);
+        getInputFromUser(password, "Password:", "password", MAX_PASSWORD_LENGTH);
+
+        //copy the data to buf in the form of "<username>\t<password>" and send to the server for validation
+        strcpy(buf, username);
+        strcat(buf, "\t");
+        strcat(buf, password);
+        sendData(sockfd, buf);
+
+        // receive 1 byte answer from server
+        if (recv(sockfd, &serverAnswer, 1, 0) < 0)
         {
-            printf("Invalid port number error");
+            perror("Receiving connection answer from the server failed");
             exit(EXIT_FAILURE);
         }
-        *port = (short)tempPort;
-    }*/
+        if(serverAnswer) // connection succeeded
+        {
+            return;
+        }
+        attemptsLeft--;
+        printf("Connection to server failed. Attempts Left: %d (out of %d)\n", attemptsLeft, MAX_INPUT_ATTEMPTS);
+    }
+    while(attemptsLeft > 0);
+    printf("No more attempts left. Exiting...");
+    exit(EXIT_FAILURE);
+
+}
+
+void getInputFromUser(char *fieldBuf, const char *fieldPrefix, const char *fieldName, int maxFieldLength)
+{
+    char *token, buf[BUF_SIZE] = {0};
+    int attemptsLeft = MAX_INPUT_ATTEMPTS;
+
+    //try to read input from user to buf
+    if (!fgets(buf, BUF_SIZE, stdin))
+    {
+        printf("Error - reading %s failed\n", fieldName);
+        exit(EXIT_FAILURE);
+    }
+
+    // parse input until first space or tab
+    token = strtok(buf, " \t\r");
+
+    if(strcmp(token, fieldPrefix))
+    {
+        printf("Invalid input format - The format is: \'%s <%s>\'. Exiting...\n", fieldPrefix, fieldName);
+        exit(EXIT_FAILURE);
+    }
+    // parse input again to get field name
+    token = strtok(NULL, " \t\r\n");
+    if (strlen(token) > maxFieldLength)
+    {
+        printf("%s is too long (maximal length is %d). Exiting...\n", fieldName, maxFieldLength);
+        exit(EXIT_FAILURE);
+    }
+    strcpy(fieldBuf, token);
+
+}
+
+void sendData(int sockfd, char *buf)
+{
+    int dataLength = htons((uint16_t)strlen(buf));
+    int dataLengthBytes = sizeof(dataLength);
+
+    //send data length
+    if (sendall(sockfd, &dataLength, &dataLengthBytes) < 0)
+    {
+        perror("Failed to send data length");
+        exit(EXIT_FAILURE);
+    }
+
+    //send the real data
+    if (sendall(sockfd, buf, &dataLength) < 0)
+    {
+        perror("Failed to send data");
+        exit(EXIT_FAILURE);
+    }
 
 }
 
 
+void recvData(int sockfd, char *buf)
+{
+    int dataLength = 0;
+    int dataLengthBytes = sizeof(dataLength);
 
+    //receive data length
+    if (recvall(sockfd, &dataLength, &dataLengthBytes) < 0)
+    {
+        perror("Failed to receive data length");
+        exit(EXIT_FAILURE);
+    }
+    //translate length to host architecture
+    dataLength = ntohs((uint16_t)dataLength);
+
+    //zero buf
+    memset(buf, 0, BUF_SIZE);
+    //receive the real data
+    if (recvall(sockfd, buf, &dataLength) < 0)
+    {
+        perror("Failed to receive data");
+        exit(EXIT_FAILURE);
+    }
+}
