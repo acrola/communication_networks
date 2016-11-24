@@ -11,6 +11,11 @@
 #include <stdbool.h>
 
 #define MAILS_COUNT 32000
+#define NUM_OF_CLIENTS 20
+#define MAX_USERNAME 50
+#define MAX_PASSWORD 50
+#define MAX_SUBJECT 100
+#define MAX_CONTENT 2000
 
 typedef struct account
 {
@@ -25,28 +30,31 @@ typedef struct mail
     account *sender;
     account **recipients;
     unsigned int recipients_num;
-    char *mail_subject;
-    char *mail_body;
+    char mail_subject[MAX_SUBJECT];
+    char mail_body[MAX_CONTENT];
     unsigned int mail_id;
 } mail;
 
 typedef enum _eOpCode
 {
-    OPCODE_SHOW_INBOX 0x200000,
-    OPCODE_GET_MAIL 0x400000,
-    OPCODE_DELETE_MAIL 0x600000,
-    OPCODE_QUIT 0x800000,
-    OPCODE_COMPOSE 0xA00000
+    OPCODE_ERROR = 0,
+    OPCODE_SHOW_INBOX = 1,
+    OPCODE_GET_MAIL = 2,
+    OPCODE_DELETE_MAIL = 3,
+    OPCODE_COMPOSE = 4,
+    OPCODE_QUIT = 5
 } eOpCode;
 
+// TODO complete rellevant masks
+/*
 typedef enum _eMasks
 {
     MASK_GET_OPCODE 0xE00000,
     MASK_GET_CLIENT_ID 0xFFFF
 } eMasks;
+*/
 
-
-account *accounts;
+account accounts[NUM_OF_CLIENTS];
 mail *mails[MAILS_COUNT];
 unsigned int accounts_num;
 unsigned int mails_num;
@@ -364,7 +372,6 @@ int lookForMailInInbox(account *acc, unsigned int mail_id)
     return 32000;
 }
 
-<<<<<<< HEAD
 bool addMailToInbox(account* recipient, unsigned int mail_id){
 	recipient->inbox_size = recipient->inbox_size + 1;
 	recipient->inbox_mail_indices = (unsigned short *)realloc(inbox_size*sizeof(unsigned short));
