@@ -17,16 +17,14 @@
 #define MAX_SUBJECT 100
 #define MAX_CONTENT 2000
 
-typedef struct account
-{
+typedef struct account {
     char username[MAX_USERNAME];
     char password[MAX_PASSWORD];
     unsigned short *inbox_mail_indices;
     unsigned short inbox_size;
 } account;
 
-typedef struct mail
-{
+typedef struct mail {
     account *sender;
     account **recipients;
     unsigned int recipients_num;
@@ -35,8 +33,7 @@ typedef struct mail
     unsigned int mail_id;
 } mail;
 
-typedef enum _eOpCode
-{
+typedef enum _eOpCode {
     OPCODE_ERROR = 0,
     OPCODE_SHOW_INBOX = 1,
     OPCODE_GET_MAIL = 2,
@@ -82,7 +79,8 @@ bool lookForMailInInbox(account *acc, unsigned int mail_id);
 
 bool addMailToInbox(account *recipient, unsigned int mail_id);
 
-bool composeNewMail(account *sender, account **recipients, unsigned int recipients_num, char *mail_subject, char *mail_body);
+bool
+composeNewMail(account *sender, account **recipients, unsigned int recipients_num, char *mail_subject, char *mail_body);
 
 bool deleteMailFromInbox(account *acc, unsigned int mail_id);
 
@@ -96,40 +94,34 @@ void get_mail_operation(int sock, int mail_id);
 
 void delete_mail_operation(int sock, int mail_id);
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
     mails_num = 0;
     char *port;
     char *path;
     int sock, new_sock;
     socklen_t sin_size;
     struct sockaddr_in myaddr, their_addr;
-    if (argc > 3)
-    {
+    if (argc > 3) {
         printf("Incorrect Argument Count");
         exit(1);
     }
 
     path = argv[1];
 
-    if (argc == 3)
-    {
-        if (!isInt(argv[2]))
-        {
+    if (argc == 3) {
+        if (!isInt(argv[2])) {
             printf("Please enter a valid number as the port number");
             exit(1);
         }
         port = argv[2];
-    } else
-    {
+    } else {
         port = "6423";
     }
 
     read_file(path);
 
     /* open IPv4 TCP socket*/
-    if ((sock = socket(PF_INET, SOCK_STREAM, 0)) < 0)
-    {
+    if ((sock = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
         perror("Could not open socket");
         exit(errno);
     }
@@ -138,21 +130,18 @@ int main(int argc, char *argv[])
     myaddr.sin_port = htons((short) strtol(port, NULL, 10));
     myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
     /* try to bind*/
-    if (bind(sock, (struct sockaddr *) &(myaddr), sizeof(myaddr)) < 0)
-    {
+    if (bind(sock, (struct sockaddr *) &(myaddr), sizeof(myaddr)) < 0) {
         perror("Could not bind socket");
         exit(errno);
     }
     /* try to listen to the ether*/
-    if (listen(sock, 1) < 0)
-    {
+    if (listen(sock, 1) < 0) {
         perror("Could not listen to socket");
         exit(errno);
     }
     sin_size = sizeof(struct sockaddr_in);
     /* accept the connection*/
-    if ((new_sock = accept(sock, (struct sockaddr *) &their_addr, &sin_size)) < 0)
-    {
+    if ((new_sock = accept(sock, (struct sockaddr *) &their_addr, &sin_size)) < 0) {
         perror("Could not accept connection");
         exit(errno);
     }
@@ -167,37 +156,32 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-bool read_file(char* path)
-{
+bool read_file(char *path) {
     FILE *fp;
     users_num = 0;   // count how many lines are in the file
     int current_character;
     fp = fopen(path, "r");
-    while (!feof(fp))
-    {
+    while (!feof(fp)) {
         current_character = fgetc(fp);
         if (current_character == '\n')
             users_num++;
     }
 
-    accounts = (account*)malloc(users_num * sizeof(account));
+    accounts = (account *) malloc(users_num * sizeof(account));
     if (accounts == NULL)
-	return false;
+        return false;
 
     int i;
     // read each line and put into accounts
-    for (i = 0; i < users_num; i++)
-    {
+    for (i = 0; i < users_num; i++) {
         fscanf(fp, "%s\t%s", accounts[i].username, accounts[i].password);
     }
     return true;
 }
 
-bool permit_user(char *user, char *pass)
-{
+bool permit_user(char *user, char *pass) {
     int i = 0;
-    for (i = 0; i < users_num; ++i)
-    {
+    for (i = 0; i < users_num; ++i) {
         if ((strcmp(accounts[i].username, user) == 0) && (strcmp(accounts[i].password, pass) == 0))
             return true;
     }
@@ -205,19 +189,16 @@ bool permit_user(char *user, char *pass)
     return false;
 }
 
-void serverLoop(int sock)
-{
+void serverLoop(int sock) {
     /* TODO - complete client's user authentication*/
     long buff = 0;
     int len = 4;
     /* get client reply*/
-    while (recvall(sock, ((long *) &buff), &len) == 0)
-    {
+    while (recvall(sock, ((long *) &buff), &len) == 0) {
         int accepted = 1;
         unsigned long op;
         unsigned long client_id;
-        if (len != 4)
-        {
+        if (len != 4) {
             perror("Error receiving data from client");
             tryClose(sock);
             exit(errno);
@@ -226,21 +207,16 @@ void serverLoop(int sock)
         op = buff & eMask.MASK_GET_OPCODE;
         client_id = buff & eMask.MASK_GET_CLIENT_ID;
         /* if op == 0 then there was some error in the client. reject the operation*/
-        if (op == 0)
-        {
+        if (op == 0) {
             accepted = 0;
-        } else
-        {
+        } else {
             /* if out of range, reject*/
-            if (client_id > MAILS_COUNT || client_id <= 0)
-            {
+            if (client_id > MAILS_COUNT || client_id <= 0) {
                 accepted = 0;
 
-            } else
-            {
+            } else {
                 /* choose the choice based on op, as per protocol specification*/
-                switch (op)
-                {
+                switch (op) {
                     /* SHOW_INBOX operation*/
                     case eOpCode.OPCODE_SHOW_INBOX:
                         show_inbox_operation(sock);
@@ -265,21 +241,18 @@ void serverLoop(int sock)
             }
         }
     }
-    if (len != 0 && len != 4)
-    {
+    if (len != 0 && len != 4) {
         perror("Error receiving data from client");
     }
     tryClose(sock);
     exit(0);
 }
 
-int isInt(char *str)
-{
+int isInt(char *str) {
     /* tests if a string is just numbers*/
     if (*str == 0)
         return 0;
-    while (*str != 0)
-    {
+    while (*str != 0) {
         if (!isdigit(*str))
             return 0;
         str++;
@@ -287,17 +260,14 @@ int isInt(char *str)
     return 1;
 }
 
-int sendall(int sock, char *buf, int *len)
-{
+int sendall(int sock, char *buf, int *len) {
     /* sendall code as seen in recitation*/
     int total = 0; /* how many bytes we've sent */
     int bytesleft = *len; /* how many we have left to send */
     int n;
-    while (total < *len)
-    {
+    while (total < *len) {
         n = send(sock, buf + total, bytesleft, 0);
-        if (n == -1)
-        { break; }
+        if (n == -1) { break; }
         total += n;
         bytesleft -= n;
     }
@@ -305,18 +275,14 @@ int sendall(int sock, char *buf, int *len)
     return n == -1 ? -1 : 0; /*-1 on failure, 0 on success */
 }
 
-int recvall(int sock, char *buf, int *len)
-{
+int recvall(int sock, char *buf, int *len) {
     int total = 0; /* how many bytes we've read */
     int bytesleft = *len; /* how many we have left to read */
     int n;
-    while (total < *len)
-    {
+    while (total < *len) {
         n = recv(sock, buf + total, bytesleft, 0);
-        if (n == -1)
-        { break; }
-        if (n == 0)
-        {
+        if (n == -1) { break; }
+        if (n == 0) {
             *len = 0;
             n = -1;
             break;
@@ -328,27 +294,22 @@ int recvall(int sock, char *buf, int *len)
     return n == -1 ? -1 : 0; /*-1 on failure, 0 on success */
 }
 
-void tryClose(int sock)
-{
-    if (close(sock) < 0)
-    {
+void tryClose(int sock) {
+    if (close(sock) < 0) {
         perror("Could not close socket");
         exit(errno);
     }
 }
 
-void shutdownSocket(int sock)
-{
+void shutdownSocket(int sock) {
     int res = 0;
     char buff[10];
     /* send shtdwn message, and stop writing*/
     shutdown(sock, SHUT_WR);
-    while (1)
-    {
+    while (1) {
         /* read until the end of the stream */
         res = recv(sock, buff, 10, 0);
-        if (res < 0)
-        {
+        if (res < 0) {
             perror("Shutdown error");
             exit(errno);
         }
@@ -360,11 +321,9 @@ void shutdownSocket(int sock)
     exit(0);
 }
 
-int lookForMailInInbox(account *acc, unsigned int mail_id)
-{
+int lookForMailInInbox(account *acc, unsigned int mail_id) {
     int i;
-    for (i = 0; i < acc->inbox_size; i++)
-    {
+    for (i = 0; i < acc->inbox_size; i++) {
         if (acc->inbox_mail_indices[i] != NULL)
             if (acc->inbox_mail_indices[i] == mail_id)
                 return i;
@@ -372,47 +331,46 @@ int lookForMailInInbox(account *acc, unsigned int mail_id)
     return 32000;
 }
 
-bool addMailToInbox(account* recipient, unsigned int mail_id){
-	recipient->inbox_size = recipient->inbox_size + 1;
-	recipient->inbox_mail_indices = (unsigned short *)realloc(inbox_size*sizeof(unsigned short));
-	if (recipient->inbox_mail_indices == NULL)
-		return false;
-	recipient->inbox_mail_indices[inbox_size - 1] = mail_id;
-	return true;
+bool addMailToInbox(account *recipient, unsigned int mail_id) {
+    recipient->inbox_size = recipient->inbox_size + 1;
+    recipient->inbox_mail_indices = (unsigned short *) realloc(inbox_size * sizeof(unsigned short));
+    if (recipient->inbox_mail_indices == NULL)
+        return false;
+    recipient->inbox_mail_indices[inbox_size - 1] = mail_id;
+    return true;
 }
 
-bool composeNewMail(account* sender, account** recipients, unsigned int recipients_num, const char* mail_subject, const char* mail_body){
-	int success = 1;
-	mail* new_mail = (mail *)malloc(sizeof(mail));
-	
-	if (new_mail == NULL)
-		  return false;
-	
-	mails_num++;
-	
-	new_mail->sender = sender;
-	new_mail->recipients = recipients;
-	new_mail->recipients_num = recipients_num;
+bool composeNewMail(account *sender, account **recipients, unsigned int recipients_num, const char *mail_subject,
+                    const char *mail_body) {
+    int success = 1;
+    mail *new_mail = (mail *) malloc(sizeof(mail));
+
+    if (new_mail == NULL)
+        return false;
+
+    mails_num++;
+
+    new_mail->sender = sender;
+    new_mail->recipients = recipients;
+    new_mail->recipients_num = recipients_num;
     strcpy(new_mail->mail_subject, mail_subject);
     strcpy(new_mail->mail_body, mail_body);
     new_mail->mail_id = mails_num - 1;
-	mails[mails_num - 1] = new_mail;
-	int i;
-	for (i = 0; i < recipients_num; i++){
-		success *= addMailToInbox(recipients[i], new_mail->mail_id);
-	}
-	return success;
+    mails[mails_num - 1] = new_mail;
+    int i;
+    for (i = 0; i < recipients_num; i++) {
+        success ^= addMailToInbox(recipients[i], new_mail->mail_id);
+    }
+    return success;
 }
 
-bool addMailToInbox(account *recipient, unsigned int mail_id)
-{
+bool addMailToInbox(account *recipient, unsigned int mail_id) {
     recipient->inbox_size = recipient->inbox_size + 1;
     acc->inbox_mail_indices = (unsigned short *) realloc(inbox_size);
     acc->inbox_mail_indices[inbox_size - 1] = mail_id;
 }
 
-bool deleteMailFromInbox(account *acc, unsigned int mail_id)
-{
+bool deleteMailFromInbox(account *acc, unsigned int mail_id) {
     int i = lookForMailInInbox(acc, mail_id);
     if (i == 32000)
         return false;
