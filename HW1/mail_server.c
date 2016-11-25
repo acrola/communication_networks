@@ -328,7 +328,8 @@ int lookForMailInInbox(account *acc, unsigned int mail_id) {
             if (acc->inbox_mail_indices[i] == mail_id)
                 return i;
     }
-    return 32000;
+    // use MAILS_COUNT as index of unfound mail
+    return MAILS_COUNT;
 }
 
 bool addMailToInbox(account *recipient, unsigned int mail_id) {
@@ -364,15 +365,10 @@ bool composeNewMail(account *sender, account **recipients, unsigned int recipien
     return success;
 }
 
-bool addMailToInbox(account *recipient, unsigned int mail_id) {
-    recipient->inbox_size = recipient->inbox_size + 1;
-    acc->inbox_mail_indices = (unsigned short *) realloc(inbox_size);
-    acc->inbox_mail_indices[inbox_size - 1] = mail_id;
-}
-
 bool deleteMailFromInbox(account *acc, unsigned int mail_id) {
     int i = lookForMailInInbox(acc, mail_id);
-    if (i == 32000)
+    // use MAILS_COUNT as index of unfound mail
+    if (i == MAILS_COUNT)
         return false;
     acc->inbox_mail_indices[i] = NULL;
     return true;
