@@ -19,8 +19,8 @@
 
 typedef struct account
 {
-    char *id;
-    char *password;
+    char username[MAX_USERNAME];
+    char password[MAX_PASSWORD];
     unsigned short *inbox_mail_indices;
     unsigned short inbox_size;
 } account;
@@ -188,7 +188,7 @@ bool read_file(char* path)
     // read each line and put into accounts
     for (i = 0; i < users_num; i++)
     {
-        fscanf(fp, "%s\t%s", accounts[i].id, accounts[i].password);
+        fscanf(fp, "%s\t%s", accounts[i].username, accounts[i].password);
     }
     return true;
 }
@@ -198,7 +198,7 @@ bool permit_user(char *user, char *pass)
     int i = 0;
     for (i = 0; i < users_num; ++i)
     {
-        if ((strcmp(accounts[i].id, user) == 0) && (strcmp(accounts[i].password, pass) == 0))
+        if ((strcmp(accounts[i].username, user) == 0) && (strcmp(accounts[i].password, pass) == 0))
             return true;
     }
 
@@ -381,7 +381,7 @@ bool addMailToInbox(account* recipient, unsigned int mail_id){
 	return true;
 }
 
-bool composeNewMail(account* sender, account** recipients, unsigned int recipients_num, char* mail_subject, char* mail_body){
+bool composeNewMail(account* sender, account** recipients, unsigned int recipients_num, const char* mail_subject, const char* mail_body){
 	int success = 1;
 	mail* new_mail = (mail *)malloc(sizeof(mail));
 	
@@ -393,9 +393,9 @@ bool composeNewMail(account* sender, account** recipients, unsigned int recipien
 	new_mail->sender = sender;
 	new_mail->recipients = recipients;
 	new_mail->recipients_num = recipients_num;
-	new_mail->mail_subject = mail_subject;
-	new_mail->mail_body = mail_body;
-	new_mail->mail_id = mails_num - 1;
+    strcpy(new_mail->mail_subject, mail_subject);
+    strcpy(new_mail->mail_body, mail_body);
+    new_mail->mail_id = mails_num - 1;
 	mails[mails_num - 1] = new_mail;
 	int i;
 	for (i = 0; i < recipients_num; i++){
@@ -409,26 +409,6 @@ bool addMailToInbox(account *recipient, unsigned int mail_id)
     recipient->inbox_size = recipient->inbox_size + 1;
     acc->inbox_mail_indices = (unsigned short *) realloc(inbox_size);
     acc->inbox_mail_indices[inbox_size - 1] = mail_id;
-}
-
-bool composeNewMail(account *sender, account **recipients, unsigned int recipients_num, char *mail_subject, char *mail_body)
-{
-    int success = 1;
-    mails_num++;
-    mail *new_mail = (mail *) malloc(sizeof(mail));
-    new_mail->sender = sender;
-    new_mail->recipients = recipients;
-    new_mail->recipients_num = recipients_num;
-    new_mail->mail_subject = mail_subject;
-    new_mail->mail_body = mail_body;
-    new_mail->mail_id = mails_num - 1;
-    mails[mails_num - 1] = new_mail;
-    int i;
-    for (i = 0; i < recipients_num; i++)
-    {
-        success *= addMailToInbox(recipients[i], new_mail->mail_id);
-    }
-    return success;
 }
 
 bool deleteMailFromInbox(account *acc, unsigned int mail_id)
