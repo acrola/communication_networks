@@ -22,6 +22,18 @@
 #define QUIT_STR "QUIT"
 
 
+
+typedef enum LoginState_t {
+    ASK_USER,
+    ASK_PASS,
+    LOGIN_SUCCESS,
+    LOGIN_FAILURE,
+    LOGIN_KILL
+
+} LoginState;
+
+
+
 typedef enum _eOpCode
 {
     OPCODE_ERROR = 0,
@@ -220,20 +232,58 @@ int sendall(int sock, void *buf, int *len)
     return n == -1 ? -1 : 0; /*-1 on failure, 0 on success */
 }
 
-void connectToServer(int sockfd, char *hostname, char *port)
+int send_imm1(int sock, char b) {
+    int temp = 1;
+    sendall(sock, &b, &temp);
+}
+
+bool connectToServer(int sockfd, char *hostname, char *port)
 {
     char buf[BUF_SIZE];
 
     //establish the initial connection with the server
     establishInitialConnection(sockfd, hostname, port);
-    //The client needs to recieve the server's welcome message
-    recvData(sockfd, buf);
+
+    char byteFromServer;
+    while (true) {
+        recv_imm1(sockfd, &byteFromServer);
+        if (byteFromServer == ASK_USER) {
+            printf("Enter username\n");
+            fgets(buf, BUF_SIZE, stdin);
+            send_imm1(sockfd, strlen(buf));
+            sendall(sockfd, buf, strlen(byteFromServer));
+            continue;
+        }
+        else if (byteFromServer == ASK_PASSWORD) {
+            printf("Enter password\n");
+            fgets(buf, BUF_SIZE, stdin);
+            send_imm1(sockfd, strlen(buf));
+            sendall(sockfd, buf, strlen(byteFromServer));
+            continue;
+        }
+        else if (byteFromServer == LOGIN_FAILURE) {
+            printf("Login failed\n");
+            continue;
+        }
+        else if (byteFromServer == LOGIN_SUCCESS) {
+            printf("Login successful\n");
+            return true;
+        }
+        else if (byteFromServer == LOGIN_KILL) {
+            printf("Login attempt killed\n");
+            return false;
+        }
+    }
+    /*
+   //The client needs to recieve the server's welcome message
+     recvData(sockfd, buf);
     //print welcome message
     printf("%s", buf);
-    /*now the client takes username and password from the user and validates then with the server:*/
+    //now the client takes username and password from the user and validates then with the server:
     validateUser(sockfd);
     // if we got here - connection succeeded
     printf("Connected to server\n");
+    */
 }
 
 
@@ -320,6 +370,12 @@ int recvall(int sock, void *buf, int *len)
     }
     *len = total; /* return number actually sent here */
     return n == -1 ? -1 : 0; /*-1 on failure, 0 on success */
+}
+
+int recv_imm1(int sock, char target)
+{
+    int temp = 1;
+    return recvall(sock, &target, &temp);
 }
 
 void shutdownSocket(int sock)

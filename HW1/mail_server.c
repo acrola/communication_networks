@@ -17,6 +17,21 @@
 #define MAX_SUBJECT 100
 #define MAX_CONTENT 2000
 
+
+
+
+
+
+
+#define ASK_USER 1
+#define ASK_PASS 2
+#define LOGIN_SUCCESS 3
+#define LOGIN_FAILURE 4
+#define LOGIN_KILL 5
+
+
+
+
 typedef struct account {
     char username[MAX_USERNAME];
     char password[MAX_PASSWORD];
@@ -39,7 +54,8 @@ typedef enum _eOpCode {
     OPCODE_GET_MAIL = 2,
     OPCODE_DELETE_MAIL = 3,
     OPCODE_COMPOSE = 4,
-    OPCODE_QUIT = 5
+    OPCODE_QUIT = 5,
+    OPCODE_PRINT = 6
 } eOpCode;
 
 // TODO complete rellevant masks
@@ -93,6 +109,12 @@ void compose_operation(int sock);
 void get_mail_operation(int sock, int mail_id);
 
 void delete_mail_operation(int sock, int mail_id);
+
+bool send_to_print(int sock, char* msg) {
+    send_imm1(sock, OPCODE_PRINT, 1);
+    sendall_imm(sock, strlen(msg), 2);
+    sendall_imm(sock, msg, strlen(msg));
+}
 
 int main(int argc, char *argv[]) {
     mails_num = 0;
@@ -149,11 +171,16 @@ int main(int argc, char *argv[]) {
     /* we can close the listening socket and play with the active socket*/
     tryClose(sock);
     /* send welcome message to the client*/
-    char connection_msg[] = "Welcome! I am simple-mail-server.\n";
-    sendall(new_sock, connection_msg, sizeof(char) * strlen(connection_msg));
+    send_to_print(new_sock, "Welcome! I am simple-mail-server.\n");
     /* server's logic*/
     serverLoop(new_sock);
     return 0;
+}
+
+void get_mail_operation(int sock, int mail_id) {
+
+
+
 }
 
 bool read_file(char *path) {
@@ -191,54 +218,62 @@ bool permit_user(char *user, char *pass) {
 
 void serverLoop(int sock) {
     /* TODO - complete client's user authentication*/
-    long buff = 0;
-    int len = 4;
-    /* get client reply*/
-    while (recvall(sock, ((long *) &buff), &len) == 0) {
-        int accepted = 1;
-        unsigned long op;
-        unsigned long client_id;
-        if (len != 4) {
-            perror("Error receiving data from client");
-            tryClose(sock);
-            exit(errno);
+    int auth_attempts = 0;
+    char username[1024] = {0};
+    char password[1024] = {0};
+    char user_len;
+    char password_len;
+    while (true) {
+        send_imm1(sock, ASK_USER);
+        recvall_imm(sock, &user_len, 1);
+        recvall(sock, username, user_len);
+        send_imm1(sock, ASK_PASS);
+        recvall_imm(sock, &password_len, 1);
+        recvall(sock, password, password_len);
+        if (permit_user(username, password)) {
+            send_imm1(sock, LOGIN_SUCCESS, 1);
+            break;
+        }
+        else {
+            auth_attempts += 1;
+            send_imm1(sock, LOGIN_FAILURE);
+            if (auth_attempts == 3) {
+                send_imm1(sock, LOGIN_KILL);
+                perror("Error receiving data from client");
+                tryClose(sock);
+                exit(1);
+            }
         }
         /* split the two parts of the client message*/
-        op = buff & eMask.MASK_GET_OPCODE;
-        client_id = buff & eMask.MASK_GET_CLIENT_ID;
+        op = buff;
         /* if op == 0 then there was some error in the client. reject the operation*/
         if (op == 0) {
             accepted = 0;
         } else {
-            /* if out of range, reject*/
-            if (client_id > MAILS_COUNT || client_id <= 0) {
-                accepted = 0;
-
-            } else {
-                /* choose the choice based on op, as per protocol specification*/
-                switch (op) {
-                    /* SHOW_INBOX operation*/
-                    case eOpCode.OPCODE_SHOW_INBOX:
-                        show_inbox_operation(sock);
-                        break;
-                        /* GET_MAIL operation*/
-                    case eOpCode.OPCODE_GET_MAIL:
-                        get_mail_operation(sock, (unsigned short) client_id - 1);
-                        break;
-                        /* DELETE_MAIL operation*/
-                    case eOpCode.OPCODE_DELETE_MAIL:
-                        delete_mail_operation(sock, (unsigned short) client_id - 1);
-                        break;
-                        /* QUIT operation*/
-                    case eOpCode.OPCODE_QUIT:
-                        quit_operation(sock);
-                        break;
-                        /* COMPOSE operation*/
-                    case eOpCode.OPCODE_COMPOSE:
-                        compose_operation(sock);
-                        break;
-                }
+            /* choose the choice based on op, as per protocol specification*/
+            switch (op) {
+                /* SHOW_INBOX operation*/
+                case eOpCode.OPCODE_SHOW_INBOX:
+                    show_inbox_operation(sock);
+                    break;
+                    /* GET_MAIL operation*/
+                case eOpCode.OPCODE_GET_MAIL:
+                    get_mail_operation(sock, (unsigned short) client_id - 1);
+                    break;
+                    /* DELETE_MAIL operation*/
+                case eOpCode.OPCODE_DELETE_MAIL:
+                    delete_mail_operation(sock, (unsigned short) client_id - 1);
+                    break;
+                    /* QUIT operation*/
+                case eOpCode.OPCODE_QUIT:
+                    quit_operation(sock);
+                    break;
+                    /* COMPOSE operation*/
+                case eOpCode.OPCODE_COMPOSE:
+                    compose_operation(sock);
+                    break;
             }
+
         }
     }
     if (len != 0 && len != 4) {
@@ -294,6 +329,20 @@ int recvall(int sock, char *buf, int *len) {
     return n == -1 ? -1 : 0; /*-1 on failure, 0 on success */
 }
 
+int sendall_imm(int sock, char* buf, int len) {
+    int temp = len;
+    return sendall(sock, buf, &temp);
+}
+
+int send_imm1(int sock, char msg) {
+    sendall_imm(sock, &msg, 1);
+}
+
+int recvall_imm(int sock, char* buf, int len) {
+    int temp = len;
+    return recvall(sock, buf, &temp);
+}
+
 void tryClose(int sock) {
     if (close(sock) < 0) {
         perror("Could not close socket");
@@ -323,13 +372,11 @@ void shutdownSocket(int sock) {
 
 int lookForMailInInbox(account *acc, unsigned int mail_id) {
     int i;
-    for (i = 0; i < acc->inbox_size; i++) {
-        if (acc->inbox_mail_indices[i] != NULL)
-            if (acc->inbox_mail_indices[i] == mail_id)
-                return i;
+    if (mail_id > acc->inbox_size) {
+        // personal mail ouot of  bounds
+        return MAILS_COUNT;
     }
-    // use MAILS_COUNT as index of unfound mail
-    return MAILS_COUNT;
+    return acc->inbox_mail_indices[mail_id - 1]; // if user asked for mail 1, we will return element 0 in mail array
 }
 
 bool addMailToInbox(account *recipient, unsigned int mail_id) {
@@ -360,7 +407,7 @@ bool composeNewMail(account *sender, account **recipients, unsigned int recipien
     mails[mails_num - 1] = new_mail;
     int i;
     for (i = 0; i < recipients_num; i++) {
-        success ^= addMailToInbox(recipients[i], new_mail->mail_id);
+        success ^= addMailToInbox(recipients[i], mails_num - 1);
     }
     return success;
 }
@@ -368,8 +415,8 @@ bool composeNewMail(account *sender, account **recipients, unsigned int recipien
 bool deleteMailFromInbox(account *acc, unsigned int mail_id) {
     int i = lookForMailInInbox(acc, mail_id);
     // use MAILS_COUNT as index of unfound mail
-    if (i == MAILS_COUNT)
-        return false;
-    acc->inbox_mail_indices[i] = NULL;
+    if (i == MAILS_COUNT) { return false; }
+    acc->inbox_mail_indices[i] = MAILS_COUNT;   // we mark an invalid mail by setting him to point to mail MAILS_COUNT,
+                                                // because it is out of bounds (0 : MAILS_COUNT - 1)
     return true;
 }
