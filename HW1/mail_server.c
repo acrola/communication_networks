@@ -100,15 +100,63 @@ composeNewMail(account *sender, account **recipients, unsigned int recipients_nu
 
 bool deleteMailFromInbox(account *acc, unsigned int mail_id);
 
-void show_inbox_operation(int sock);
+void show_inbox_operation(int sock, account* account);
 
 void quit_operation(int sock);
 
-void compose_operation(int sock);
+void compose_operation(int sock, account* account);
 
-void get_mail_operation(int sock, int mail_id);
+void get_mail_operation(int sock, account* account);
 
-void delete_mail_operation(int sock, int mail_id);
+void delete_mail_operation(int sock, account* account);
+
+short twoBytesToShort(char arr[]) {
+    short result;
+    result += arr[0];
+    result = (result << 8);
+    result += arr[1];
+    return result;
+}
+
+void fillBufferUnknownSize(int sock, char* buff) {
+    char twoBytesPrefix[2];
+    recvall_imm(sock, twoBytesPrefix, 2);
+    recvall_imm(sock, buff, twoBytesToShort(twoBytesPrefix));
+}
+
+void compose_operation(int sock, account* currentAccount) {
+    char subject[1024], targets[1024], body[1024];
+    fillBufferUnknownSize(sock, subject);
+    fillBufferUnknownSize(sock, targets);
+    fillBufferUnknownSize(sock, body);
+    // need to parse targets to a list, create new mail instance and return success
+
+
+}
+
+
+void show_inbox_operation(int sock, account* currentAccount) {
+    int i;
+    char mail_msg[1024];
+    for (i = 0; i < currentAccount->inbox_size; i++) {
+        if (currentAccount->inbox_mail_indices[i] == MAILS_COUNT) { continue; } // mail idx 32000 is marked as deleted
+        memset(mail_msg, 0);
+        itoa(i, mail_msg, 10);
+        strcat(mail_msg, " ");
+        strcat(mail_msg, mails[currentAccount->inbox_mail_indices[i]]->sender->username);
+        strcat(mail_msg, " ~");
+        strcat(mail_msg, mails[currentAccount->inbox_mail_indices[i]]->mail_subject);
+        strcat(mail_msg, " ~");
+        strcat(mail_msg, "*\n");
+        send_to_print(sock, mail_msg);
+    }
+    send_imm1(sock, 'H'); // operation halted, now waiting for more input from user
+}
+
+void get_mail_operation(int sock, account* account) {
+
+
+}
 
 bool send_to_print(int sock, char* msg) {
     send_imm1(sock, OPCODE_PRINT, 1);
@@ -123,6 +171,7 @@ int main(int argc, char *argv[]) {
     int sock, new_sock;
     socklen_t sin_size;
     struct sockaddr_in myaddr, their_addr;
+    accunt* currentAccount;
     if (argc > 3) {
         printf("Incorrect Argument Count");
         exit(1);
@@ -163,18 +212,22 @@ int main(int argc, char *argv[]) {
     }
     sin_size = sizeof(struct sockaddr_in);
     /* accept the connection*/
-    if ((new_sock = accept(sock, (struct sockaddr *) &their_addr, &sin_size)) < 0) {
-        perror("Could not accept connection");
-        exit(errno);
-    }
     /* by this point we have a connection. play the game*/
     /* we can close the listening socket and play with the active socket*/
     tryClose(sock);
     /* send welcome message to the client*/
-    send_to_print(new_sock, "Welcome! I am simple-mail-server.\n");
+    //send_to_print(new_sock, "Welcome! I am simple-mail-server.\n");
     /* server's logic*/
-    serverLoop(new_sock);
-    return 0;
+    while (true) {
+        if ((new_sock = accept(sock, (struct sockaddr *) &their_addr, &sin_size)) < 0) {
+            perror("Could not accept connection");
+            exit(errno);
+        }
+        // reached here, has connection with client
+        if ((currentAccount = loginToAccount(new_sock)) == NULL) { continue; }
+        serverLoop(new_sock, currentAccount);
+    }
+
 }
 
 void get_mail_operation(int sock, int mail_id) {
@@ -206,19 +259,9 @@ bool read_file(char *path) {
     return true;
 }
 
-bool permit_user(char *user, char *pass) {
-    int i = 0;
-    for (i = 0; i < users_num; ++i) {
-        if ((strcmp(accounts[i].username, user) == 0) && (strcmp(accounts[i].password, pass) == 0))
-            return true;
-    }
 
-    return false;
-}
-
-void serverLoop(int sock) {
-    /* TODO - complete client's user authentication*/
-    int auth_attempts = 0;
+account* loginToAccount(int sock) {
+    int i, auth_attempts = 0;
     char username[1024] = {0};
     char password[1024] = {0};
     char user_len;
@@ -230,57 +273,55 @@ void serverLoop(int sock) {
         send_imm1(sock, ASK_PASS);
         recvall_imm(sock, &password_len, 1);
         recvall(sock, password, password_len);
-        if (permit_user(username, password)) {
-            send_imm1(sock, LOGIN_SUCCESS, 1);
-            break;
-        }
-        else {
-            auth_attempts += 1;
-            send_imm1(sock, LOGIN_FAILURE);
-            if (auth_attempts == 3) {
-                send_imm1(sock, LOGIN_KILL);
-                perror("Error receiving data from client");
-                tryClose(sock);
-                exit(1);
+
+        for (i = 0; i < users_num; i++) {
+            if ((strcmp(accounts[i].username, username) == 0) && (strcmp(accounts[i].password, password) == 0)) {
+                send_imm1(sock, LOGIN_SUCCESS);
+                return &accounts[i];
             }
         }
-        /* split the two parts of the client message*/
-        op = buff;
-        /* if op == 0 then there was some error in the client. reject the operation*/
-        if (op == 0) {
-            accepted = 0;
-        } else {
-            /* choose the choice based on op, as per protocol specification*/
-            switch (op) {
-                /* SHOW_INBOX operation*/
-                case eOpCode.OPCODE_SHOW_INBOX:
-                    show_inbox_operation(sock);
-                    break;
-                    /* GET_MAIL operation*/
-                case eOpCode.OPCODE_GET_MAIL:
-                    get_mail_operation(sock, (unsigned short) client_id - 1);
-                    break;
-                    /* DELETE_MAIL operation*/
-                case eOpCode.OPCODE_DELETE_MAIL:
-                    delete_mail_operation(sock, (unsigned short) client_id - 1);
-                    break;
-                    /* QUIT operation*/
-                case eOpCode.OPCODE_QUIT:
-                    quit_operation(sock);
-                    break;
-                    /* COMPOSE operation*/
-                case eOpCode.OPCODE_COMPOSE:
-                    compose_operation(sock);
-                    break;
-            }
+
+        send_imm1(sock, LOGIN_FAILURE);
+        auth_attempts += 1;
+        if (auth_attempts == 3) {
+            send_imm1(sock, LOGIN_KILL);
+            perror("Error receiving data from client");
+            return NULL;
+        }
+    }
+}
+
+void serverLoop(int sock, account* currentAccount) {
+    // when here, after sock establishment and user auth. keep listening for ops
+
+    char op;
+
+    while (true) {
+        op = recv_imm1(sock);
+        switch (op) {
+            /* SHOW_INBOX operation*/
+            case eOpCode.OPCODE_SHOW_INBOX:
+                show_inbox_operation(sock, currentAccount);
+                break;
+                /* GET_MAIL operation*/
+            case eOpCode.OPCODE_GET_MAIL:
+                get_mail_operation(sock, currentAccount);
+                break;
+                /* DELETE_MAIL operation*/
+            case eOpCode.OPCODE_DELETE_MAIL:
+                delete_mail_operation(sock, currentAccount);
+                break;
+                /* QUIT operation*/
+            case eOpCode.OPCODE_QUIT:
+                quit_operation(sock);
+                return;
+                /* COMPOSE operation*/
+            case eOpCode.OPCODE_COMPOSE:
+                compose_operation(sock, currentAccount);
+                break;
 
         }
     }
-    if (len != 0 && len != 4) {
-        perror("Error receiving data from client");
-    }
-    tryClose(sock);
-    exit(0);
 }
 
 int isInt(char *str) {
@@ -341,6 +382,12 @@ int send_imm1(int sock, char msg) {
 int recvall_imm(int sock, char* buf, int len) {
     int temp = len;
     return recvall(sock, buf, &temp);
+}
+
+char recv_imm1(int sock) {
+    char temp;
+    recvall_imm(sock, &temp, 1);
+    return temp;
 }
 
 void tryClose(int sock) {
