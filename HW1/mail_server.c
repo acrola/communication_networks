@@ -32,21 +32,21 @@
 
 
 
-typedef struct account {
+typedef struct Account {
     char username[MAX_USERNAME];
     char password[MAX_PASSWORD];
     unsigned short *inbox_mail_indices;
     unsigned short inbox_size;
-} account;
+} Account;
 
-typedef struct mail {
+typedef struct Mail {
     account *sender;
     account **recipients;
     unsigned int recipients_num;
     char mail_subject[MAX_SUBJECT];
     char mail_body[MAX_CONTENT];
     unsigned int mail_id;
-} mail;
+} Mail;
 
 typedef enum _eOpCode {
     OPCODE_ERROR = 0,
@@ -100,52 +100,127 @@ composeNewMail(account *sender, account **recipients, unsigned int recipients_nu
 
 bool deleteMailFromInbox(account *acc, unsigned int mail_id);
 
-void show_inbox_operation(int sock, account* account);
+void show_inbox_operation(int sock, Account* account);
 
 void quit_operation(int sock);
 
-void compose_operation(int sock, account* account);
+void compose_operation(int sock, Account* account);
 
-void get_mail_operation(int sock, account* account);
+void get_mail_operation(int sock, Account* account);
 
-void delete_mail_operation(int sock, account* account);
+void delete_mail_operation(int sock, Account* account);
 
-short twoBytesToShort(char arr[]) {
-    short result;
-    result += arr[0];
-    result = (result << 8);
-    result += arr[1];
+// fuction taken from  http://stackoverflow.com/questions/9210528/split-string-with-delimiters-in-c
+
+char** str_split(char* a_str, const char a_delim)
+{
+    char** result    = 0;
+    size_t count     = 0;
+    char* tmp        = a_str;
+    char* last_comma = 0;
+    char delim[2];
+    delim[0] = a_delim;
+    delim[1] = 0;
+
+    /* Count how many elements will be extracted. */
+    while (*tmp)
+    {
+        if (a_delim == *tmp)
+        {
+            count++;
+            last_comma = tmp;
+        }
+        tmp++;
+    }
+
+    /* Add space for trailing token. */
+    count += last_comma < (a_str + strlen(a_str) - 1);
+
+    /* Add space for terminating null string so caller
+       knows where the list of returned strings ends. */
+    count++;
+
+    result = malloc(sizeof(char*) * count);
+
+    if (result)
+    {
+        size_t idx  = 0;
+        char* token = strtok(a_str, delim);
+
+        while (token)
+        {
+            assert(idx < count);
+            *(result + idx++) = strdup(token);
+            token = strtok(0, delim);
+        }
+        assert(idx == count - 1);
+        *(result + idx) = 0;
+    }
+
     return result;
 }
 
-void fillBufferUnknownSize(int sock, char* buff) {
-    char twoBytesPrefix[2];
-    recvall_imm(sock, twoBytesPrefix, 2);
-    recvall_imm(sock, buff, twoBytesToShort(twoBytesPrefix));
+short twoBytesToShort(char arr[]) {
+    short* shortPtr = (short*)arr;
+    return *arr;
 }
 
-void compose_operation(int sock, account* currentAccount) {
+Account* getAccountByUsername(char* username) {
+    int i;
+    for (i = 0; i < accounts_num; i++) {
+        if (strcmp(accounts[i]->username, username)) { return &accounts[i]; }
+    }
+    return NULL;
+}
+
+void fillBufferUnknownSize(int sock, char* buff) {
+    recvall_imm(sock, buff, recieveTwoBytesAndCastToShort(sock));
+}
+
+void compose_operation(int sock, Account* account) {
     char subject[1024], targets[1024], body[1024];
     fillBufferUnknownSize(sock, subject);
     fillBufferUnknownSize(sock, targets);
     fillBufferUnknownSize(sock, body);
-    // need to parse targets to a list, create new mail instance and return success
+    Mail* currentMail = &mails[mails_num];
+    currentMail->mail_subject = subject;
+    currentMail->mail_body = body;
+    currentMail->recipients_num = 0;
+    tokens = str_split(targets, ',');
+    Account* tempAccount;
 
-
+    if (tokens)
+    {
+        int i;
+        for (i = 0; *(tokens + i); i++)
+        {
+            tempAccount = getAccountByUsername(*(tokens + i));
+            currentMail->recipients[currentMail->recipients_num] = tempAccount;
+            currentMail->recipients_num++;
+            tempAccount->inbox_mail_indices[tempAccount->inbox_size] = mails_num;
+            tempAccount->inbox_size++;
+            free(*(tokens + i));
+        }
+        printf("\n");
+        free(tokens);
+    }
+    mails_num++;
+    send_to_print(sock, "Mail sent\n");
+    send_imm1(sock, 'H');
 }
 
 
-void show_inbox_operation(int sock, account* currentAccount) {
+void show_inbox_operation(int sock, Account* account) {
     int i;
     char mail_msg[1024];
     for (i = 0; i < currentAccount->inbox_size; i++) {
-        if (currentAccount->inbox_mail_indices[i] == MAILS_COUNT) { continue; } // mail idx 32000 is marked as deleted
+        if (account->inbox_mail_indices[i] == MAILS_COUNT) { continue; } // mail idx 32000 is marked as deleted
         memset(mail_msg, 0);
         itoa(i, mail_msg, 10);
         strcat(mail_msg, " ");
-        strcat(mail_msg, mails[currentAccount->inbox_mail_indices[i]]->sender->username);
+        strcat(mail_msg, mails[account->inbox_mail_indices[i]]->sender->username);
         strcat(mail_msg, " ~");
-        strcat(mail_msg, mails[currentAccount->inbox_mail_indices[i]]->mail_subject);
+        strcat(mail_msg, mails[account->inbox_mail_indices[i]]->mail_subject);
         strcat(mail_msg, " ~");
         strcat(mail_msg, "*\n");
         send_to_print(sock, mail_msg);
@@ -153,9 +228,61 @@ void show_inbox_operation(int sock, account* currentAccount) {
     send_imm1(sock, 'H'); // operation halted, now waiting for more input from user
 }
 
-void get_mail_operation(int sock, account* account) {
+short reciveTwoBytesAndCastToShort(int sock) {
+    char twoBytesFromServer[2];
+    short* result;
+    recvall_imm(sock, twoBytesFromServer, 2);
+    result = (short*)twoBytesFromServer;
+    return *result;
+}
 
+bool canRead(Mail* mail, Account* account) {
+    int i;
+    for (i = 0; i < mail->recipients_num; i++) {
+        if (mail->recipients[i] == account) {
+            return true;
+        }
+    }
+    return false;
+}
 
+void get_mail_operation(int sock, Account* account) {
+    short mail_idx = recieveTwoBytesAndCastToShort(sock);
+    int i;
+    mail* currentMail = mails[mail_idx];
+    char mail_msg[4096];
+    memset(mail_msg, 0);
+    if (canRead(mail, account)) {
+        strcat(mail_msg, "From: ");
+        strcat(mail_msg, mail->sender->username);
+        strcat(mail_msg, "\nTo: ");
+        for (i = 0; i < mail->recipients_num; i++) {
+            if (i > 0) { strcat(mail_msg, ","); }
+            strcat(mail_msg, mail->recipients[i]->username);
+        }
+        strcat(mail_msg, "\nSubject: ");
+        strcat(mail_msg, mail->mail_subject);
+        strcat(mail_msg, "\nText: ");
+        strcat(mail_msg, mail->mail_body);
+        strcat(mail_msg, "\n");
+        send_to_print(sock, mail_msg);
+    }
+    else {
+        send_to_print(sock, "Failed to get mail\n");
+    }
+    send_imm1(sock, 'H');
+}
+
+void delete_mail_operation(int sock, Account* account) {
+    short mail_idx = recieveTwoBytesAndCastToShort(sock);
+    int i;
+    if (i < account->inbox_size || account->inbox_mail_indices[i] == MAILS_COUNT) {
+        send_to_print(sock, "Invalid selection\n");
+    }
+    else {
+        account->inbox_mail_indices[i] == MAILS_COUNT;
+    }
+    send_imm1(sock, 'H');
 }
 
 bool send_to_print(int sock, char* msg) {
@@ -227,12 +354,6 @@ int main(int argc, char *argv[]) {
         if ((currentAccount = loginToAccount(new_sock)) == NULL) { continue; }
         serverLoop(new_sock, currentAccount);
     }
-
-}
-
-void get_mail_operation(int sock, int mail_id) {
-
-
 
 }
 
