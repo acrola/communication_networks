@@ -54,30 +54,30 @@ void recvData(int sockfd, char *buf)
     trySysCall(recvall(sockfd, buf, &dataLength), "Failed to receive data", sockfd);
 }
 
-eOpCode getOpCode(char *token)
+char getOpCode(char *token)
 {
     if (!strcmp(token, SHOW_INBOX_STR))
     {
-        return OPCODE_SHOW_INBOX;
+        return OP_SHOWINBOX;
     }
     else if (!strcmp(token, GET_MAIL_STR))
     {
-        return OPCODE_GET_MAIL;
+        return OP_GETMAIL;
     }
     else if (!strcmp(token, DELETE_MAIL_STR))
     {
-        return OPCODE_DELETE_MAIL;
+        return OP_DELETEMAIL;
     }
     else if (!strcmp(token, COMPOSE_STR))
     {
-        return OPCODE_COMPOSE;
+        return OP_COMPOSE;
     }
     else if (!strcmp(token, QUIT_STR))
     {
-        return OPCODE_QUIT;
+        return OP_QUIT;
     }
     // bad operation - return error
-    return OPCODE_ERROR;
+    return '0';
 }
 
 
@@ -367,7 +367,7 @@ void sendData(int sockfd, char *buf);
 
 void getInputFromUser(char *fieldBuf, const char *fieldPrefix, const char *fieldName, int maxFieldLength, int sockfd);
 
-eOpCode getOpCode(char *token);
+char getOpCode(char *token);
 
 int main(int argc, char *argv[])
 {
@@ -396,13 +396,18 @@ int main(int argc, char *argv[])
                 start_login_request(sock);
                 break;
             case LOG_FAILURE:
-                log_failure_handler(sock);
+                log_failure_handler(sock); // what is the difference between this and OP_QUIT...? server disconnected us anyway. consider union
+                clientIsActive = 0;
                 break;
             case OP_PRINT:
                 print_from_server(sock);
                 break;
+            case OP_HALT:
+                get_operation_from_user(sock, &clientIsActive); // maybe set clientIsActive to zero
+                break;
             case OP_QUIT:
                 quit_operation(sock);
+                clientIsActive = 0;
                 break;
             default:;
 
@@ -418,7 +423,7 @@ int main(int argc, char *argv[])
             break;
         }
         token = strtok(buf, " \t\r");
-        char opCode = (char) getOpCode(token);
+        char opCode = getOpCode(token);
 
         // if opcode is valid - send it to the server (o.w we ask the user to try again)
         if (opCode != OPCODE_ERROR)
@@ -495,5 +500,74 @@ int main(int argc, char *argv[])
     }
     tryClose(sockfd);
     return EXIT_SUCCESS;
+
+}
+
+void print_from_server(sock) {
+    char text_msg[MAX_MAIL_MSG];
+    getData(sock, text_msg);
+    printf(text_msg);
+}
+
+
+void get_operation_from_user(sock, char* clientIsActive) {
+    char text_msg[MAX_MAIL_MSG];
+    memset(text_msg, 0, MAX_MAIL_MSG);
+    //get input from user
+    if (!fgets(text_msg, MAX_MAIL_MSG, stdin))
+    {
+        printf("Error getting input from user\n");
+        break;
+    }
+    token = strtok(buf, " \t\r");
+    char opCode = getOpCode(token);
+
+    // if opcode is valid - send it to the server (o.w we ask the user to try again)
+    if (opCode != OPCODE_ERROR)
+    {
+        trySysCall(send(sockfd, &opCode, sizeof(char), 0), "Sending opcode to server failed", 0);
+    }
+    switch (opCode)
+    {
+        case OP_SHOWINBOX:
+            break; // unary op
+
+        case OPCODE_DELETE_MAIL: // binary ops
+        case OPCODE_GET_MAIL:
+            token = strtok(NULL, " \t\r\n");
+            mailId = htons((uint16_t) strtol(token, NULL, 10));// is this 2 bytes? it should be for server compatability
+
+            // send mail id
+            sendall(sockfd, &mailId, &mailIdSize);
+            break;
+        case OPCODE_COMPOSE:
+
+            mailLength = 0;
+            //3 loops - To, Subject, Text
+            for (int i = 0; i < 3; ++i)
+            {
+                if (!fgets(buf + mailLength, BUF_SIZE - mailLength, stdin))
+                {
+                    printf("Error getting input from user (compose)\n");
+                    break;
+                }
+                //update mail length
+                mailLength = strlen(buf);
+
+            }
+
+            sendData(sockfd, buf);
+            printf("%s", buf);
+            break;
+        case OPCODE_QUIT:
+            //todo - do we really need to let the server know we're quitting? if not - change above..
+            *clientIsActive = 0;
+            send_char(sock, OP_QUIT);
+            break;
+        case OPCODE_ERROR:
+        default:
+            printf("Invalid operation. Please try again.\n");
+            break;
+    }
 
 }
