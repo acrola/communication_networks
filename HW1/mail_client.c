@@ -336,9 +336,10 @@ void quit_operation()
 
 }
 
-void get_operation_from_user(sock, char *clientIsActive)
+void get_operation_from_user(int sockfd, char *clientIsActive)
 {
     char text_msg[BUF_SIZE];
+    char *token;
     memset(text_msg, 0, BUF_SIZE);
     //get input from user
     if (!fgets(text_msg, BUF_SIZE, stdin))
@@ -389,7 +390,7 @@ void get_operation_from_user(sock, char *clientIsActive)
         case OP_QUIT:
             //todo - do we really need to let the server know we're quitting? if not - change above..
             *clientIsActive = 0;
-            send_char(sock, OP_QUIT);
+            send_char(sockfd, OP_QUIT);
             break;
         case 0:
         default:
