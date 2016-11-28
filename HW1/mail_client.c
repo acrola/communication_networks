@@ -6,63 +6,40 @@
 #define COMPOSE_STR "COMPOSE"
 #define QUIT_STR "QUIT"
 
-void sendData(int sockfd, char *buf)
-{
-    int dataLength = htons((uint16_t) strlen(buf));
-    int dataLengthBytes = sizeof(dataLength);
+//void sendData(int sockfd, char *buf)
+//{
+//    int dataLength = htons((uint16_t) strlen(buf));
+//    int dataLengthBytes = sizeof(dataLength);
+//
+//    //send data length
+//    trySysCall(sendall(sockfd, (char *) &dataLength, &dataLengthBytes), "Failed to send data length", sockfd);
+//
+//    //send the real data
+//    trySysCall(sendall(sockfd, buf, &dataLength), "Failed to send data", sockfd);
+//}
+//
+//
+//void recvData(int sockfd, char *buf)
+//{
+//    int dataLength = 0;
+//    int dataLengthBytes = sizeof(dataLength);
+//
+//    //receive data length
+//    trySysCall(recvall(sockfd, &dataLength, &dataLengthBytes), "Failed to receive data length", sockfd);
+//
+//    //translate length to host architecture
+//    dataLength = ntohs((uint16_t) dataLength);
+//
+//    //zero buf
+//    memset(buf, 0, BUF_SIZE);
+//
+//    //receive the real data
+//    trySysCall(recvall(sockfd, buf, &dataLength), "Failed to receive data", sockfd);
+//}
 
-    //send data length
-    trySysCall(sendall(sockfd, (char *) &dataLength, &dataLengthBytes), "Failed to send data length", sockfd);
-
-    //send the real data
-    trySysCall(sendall(sockfd, buf, &dataLength), "Failed to send data", sockfd);
-}
 
 
-void recvData(int sockfd, char *buf)
-{
-    int dataLength = 0;
-    int dataLengthBytes = sizeof(dataLength);
-
-    //receive data length
-    trySysCall(recvall(sockfd, &dataLength, &dataLengthBytes), "Failed to receive data length", sockfd);
-
-    //translate length to host architecture
-    dataLength = ntohs((uint16_t) dataLength);
-
-    //zero buf
-    memset(buf, 0, BUF_SIZE);
-
-    //receive the real data
-    trySysCall(recvall(sockfd, buf, &dataLength), "Failed to receive data", sockfd);
-}
-
-char getOpCode(char *token)
-{
-    if (!strcmp(token, SHOW_INBOX_STR))
-    {
-        return OP_SHOWINBOX;
-    }
-    else if (!strcmp(token, GET_MAIL_STR))
-    {
-        return OP_GETMAIL;
-    }
-    else if (!strcmp(token, DELETE_MAIL_STR))
-    {
-        return OP_DELETEMAIL;
-    }
-    else if (!strcmp(token, COMPOSE_STR))
-    {
-        return OP_COMPOSE;
-    }
-    else if (!strcmp(token, QUIT_STR))
-    {
-        return OP_QUIT;
-    }
-    // bad operation - return error
-    return '0';
-}
-
+char getOpCode(char *token);
 
 
 bool connectToServer(int sockfd, char *hostname, char *port)
@@ -316,7 +293,7 @@ void sendData(int sockfd, char *buf);
 
 void getInputFromUser(char *fieldBuf, const char *fieldPrefix, const char *fieldName, int maxFieldLength, int sockfd);
 
-char getOpCode(char *token);
+
 
 
 void print_from_server(int sockfd)
@@ -403,20 +380,21 @@ void get_operation_from_user(int sockfd, char *clientIsActive)
 int main(int argc, char *argv[])
 {
     uint16_t mailId;
-    int sockfd, clientIsActive, mailIdSize = sizeof(mailId), mailLength;
+    int sockfd, mailIdSize = sizeof(mailId), mailLength;
     char *hostname, *port, buf[BUF_SIZE], *token, serverResult;
+    bool clientIsActive;
 
-
+    // analyze hostname and port no.
     analyzeProgramArguments(argc, argv, &hostname, &port);
 
     // open TCP socket with IPv4
-    // (no opened socket yet - hence we pass a -1 as a sockfd)
+    // (no opened socket yet - hence we pass a -1 as a sockfd in case of a syscall failure)
     trySysCall((sockfd = socket(PF_INET, SOCK_STREAM, 0)), "Error in opening client's socket", -1);
 
     /* connect to server*/
     connectToServer(sockfd, hostname, port);
 
-    clientIsActive = 1;
+    clientIsActive = true;
     // loop runs as long as the client wants to get data and no errors occur.
     // if the client quits or an error occurs - the clientIsActive is set to 0,
     // we get out of the loop and shutdown the client program gracefully
@@ -534,4 +512,30 @@ int main(int argc, char *argv[])
     tryClose(sockfd);
     return EXIT_SUCCESS;
 
+}
+
+char getOpCode(char *token)
+{
+    if (!strcmp(token, SHOW_INBOX_STR))
+    {
+        return OP_SHOWINBOX;
+    }
+    else if (!strcmp(token, GET_MAIL_STR))
+    {
+        return OP_GETMAIL;
+    }
+    else if (!strcmp(token, DELETE_MAIL_STR))
+    {
+        return OP_DELETEMAIL;
+    }
+    else if (!strcmp(token, COMPOSE_STR))
+    {
+        return OP_COMPOSE;
+    }
+    else if (!strcmp(token, QUIT_STR))
+    {
+        return OP_QUIT;
+    }
+    // bad operation - return error
+    return OP_ERROR;
 }

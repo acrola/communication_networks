@@ -14,8 +14,8 @@
 #ifndef MAIL_COMMON_H
 #define MAIL_COMMON_H
 
+#define DEFAULT_HOSTNAME "localhost"
 #define DEFAULT_PORT "6423"
-#define DEFAULT_HOSTNAME = "localhost"
 #define TOTAL_TO 20
 #define MAXMAILS 32000
 #define MAX_USERNAME 50
@@ -32,6 +32,7 @@
 #define OP_PRINT 'p'
 #define OP_HALT 'h'
 #define OP_QUIT 'q'
+#define OP_ERROR '0'
 
 #define LOG_FAILURE 'f'
 #define LOG_KILL 'k'
