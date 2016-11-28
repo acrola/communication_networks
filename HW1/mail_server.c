@@ -28,35 +28,21 @@ typedef struct Mail {
 
 Account accounts[NUM_OF_CLIENTS];
 Mail mails[MAILS_COUNT];
-unsigned int accounts_num;
-unsigned int mails_num;
+
+unsigned int accounts_num; // value will be init'ed in read_file() ...
+unsigned int mails_num = 0;
 
 int isInt(char *str);
-
-int sendall(int sock, char *buf, int *len);
 
 void shutdownSocket(int sock);
 
 void tryClose(int sock);
 
-int recvall(int sock, char *buf, int *len);
-
 void read_file(char *path);
-
-bool permit_user(char *user, char *pass);
 
 void parseMessage(int sock, unsigned char type, unsigned int nums);
 
 void serverLoop(int sock);
-
-bool lookForMailInInbox(account *acc, unsigned int mail_id);
-
-bool addMailToInbox(account *recipient, unsigned int mail_id);
-
-bool
-composeNewMail(account *sender, account **recipients, unsigned int recipients_num, char *mail_subject, char *mail_body);
-
-bool deleteMailFromInbox(account *acc, unsigned int mail_id);
 
 void show_inbox_operation(int sock, Account* account);
 
@@ -68,7 +54,7 @@ void get_mail_operation(int sock, Account* account);
 
 void delete_mail_operation(int sock, Account* account);
 
-// fuction taken from  http://stackoverflow.com/questions/9210528/split-string-with-delimiters-in-c
+// function taken from  http://stackoverflow.com/questions/9210528/split-string-with-delimiters-in-c
 
 char** str_split(char* a_str, const char a_delim)
 {
@@ -175,7 +161,7 @@ void show_inbox_operation(int sock, Account* account) {
     char mail_msg[MAX_MAIL_MSG];
     for (i = 0; i < currentAccount->inbox_size; i++) {
         if (account->inbox_mail_indices[i] == MAXMAILS) { continue; } // mail idx MAXMAILS is marked as a deleted mail
-        memset(mail_msg, 0);
+        memset(mail_msg, 0, MAX_MAIL_MSG);
         itoa(i, mail_msg, 10);
         strcat(mail_msg, " ");
         strcat(mail_msg, mails[account->inbox_mail_indices[i]]->sender->username);
@@ -202,10 +188,10 @@ bool canRead(Mail* mail, Account* account) {
 void get_mail_operation(int sock, Account* account) {
     short mail_idx = recieveTwoBytesAndCastToShort(sock);
     int i;
-    mail* currentMail = mails[mail_idx];
-    char mail_msg[4096];
-    memset(mail_msg, 0);
+    Mail* currentMail = &mails[mail_idx];
+    char mail_msg[MAX_MAIL_MSG];
     if (canRead(mail, account)) {
+        memset(mail_msg, 0, MAX_MAIL_MSG);
         strcat(mail_msg, "From: ");
         strcat(mail_msg, mail->sender->username);
         strcat(mail_msg, "\nTo: ");
@@ -218,7 +204,7 @@ void get_mail_operation(int sock, Account* account) {
         strcat(mail_msg, "\nText: ");
         strcat(mail_msg, mail->content);
         strcat(mail_msg, "\n");
-        send_to_print(sock, mail_msg);
+        sendToClientPrint(sock, mail_msg);
     }
     else {
         sendToClientPrint(sock, "Failed to get mail\n");
@@ -328,6 +314,7 @@ bool read_file(char *path) {
 
 Account* loginToAccount(int sock) {
     int i, auth_attempts = 0;
+    const int AUTH_ATTEMPTS = 3;
     char username[MAX_USERNAME] = {0};
     char password[MAX_PASSWORD] = {0};
     char user_len;
@@ -338,15 +325,15 @@ Account* loginToAccount(int sock) {
         getData(sock, password);
         for (i = 0; i < users_num; i++) {
             if ((strcmp(accounts[i].username, username) == 0) && (strcmp(accounts[i].password, password) == 0)) {
-                sendHalt(sock);
+                sendHalt(sock); // login successful, wait for input from user
                 return &accounts[i];
             }
         }
 
         send_char(sock, LOG_REQUEST);
         auth_attempts += 1;
-        if (auth_attempts == 3) {
-            send_char(sock, LOGIN_KILL);
+        if (auth_attempts >= AUTH_ATTEMPTS) {
+            send_char(sock, LOG_KILL);
             return NULL;
         }
     }
@@ -374,6 +361,10 @@ void serverLoop(int sock, Account* currentAccount) {
                 break;
         }
     }
+}
+
+int quit_operation(sock) {
+
 }
 
 int isInt(char *str) {
@@ -417,53 +408,4 @@ void shutdownSocket(int sock) {
     exit(0);
 }
 
-int lookForMailInInbox(account *acc, unsigned int mail_id) {
-    int i;
-    if (mail_id > acc->inbox_size) {
-        // personal mail ouot of  bounds
-        return MAILS_COUNT;
-    }
-    return acc->inbox_mail_indices[mail_id - 1]; // if user asked for mail 1, we will return element 0 in mail array
-}
 
-bool addMailToInbox(account *recipient, unsigned int mail_id) {
-    recipient->inbox_size = recipient->inbox_size + 1;
-    recipient->inbox_mail_indices = (unsigned short *) realloc(inbox_size * sizeof(unsigned short));
-    if (recipient->inbox_mail_indices == NULL)
-        return false;
-    recipient->inbox_mail_indices[inbox_size - 1] = mail_id;
-    return true;
-}
-
-bool composeNewMail(account *sender, account **recipients, unsigned int recipients_num, const char *mail_subject,
-                    const char *mail_body) {
-    int success = 1;
-    mail *new_mail = (mail *) malloc(sizeof(mail));
-
-    if (new_mail == NULL)
-        return false;
-
-    mails_num++;
-
-    new_mail->sender = sender;
-    new_mail->recipients = recipients;
-    new_mail->recipients_num = recipients_num;
-    strcpy(new_mail->mail_subject, mail_subject);
-    strcpy(new_mail->mail_body, mail_body);
-    new_mail->mail_id = mails_num - 1;
-    mails[mails_num - 1] = new_mail;
-    int i;
-    for (i = 0; i < recipients_num; i++) {
-        success ^= addMailToInbox(recipients[i], mails_num - 1);
-    }
-    return success;
-}
-
-bool deleteMailFromInbox(account *acc, unsigned int mail_id) {
-    int i = lookForMailInInbox(acc, mail_id);
-    // use MAILS_COUNT as index of unfound mail
-    if (i == MAILS_COUNT) { return false; }
-    acc->inbox_mail_indices[i] = MAILS_COUNT;   // we mark an invalid mail by setting him to point to mail MAILS_COUNT,
-                                                // because it is out of bounds (0 : MAILS_COUNT - 1)
-    return true;
-}
