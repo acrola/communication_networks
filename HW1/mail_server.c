@@ -9,28 +9,7 @@
 #include <errno.h>
 #include <ctype.h>
 #include <stdbool.h>
-
-#define MAILS_COUNT 32000
-#define NUM_OF_CLIENTS 20
-#define MAX_USERNAME 50
-#define MAX_PASSWORD 50
-#define MAX_SUBJECT 100
-#define MAX_CONTENT 2000
-
-
-
-
-
-
-
-#define ASK_USER 1
-#define ASK_PASS 2
-#define LOGIN_SUCCESS 3
-#define LOGIN_FAILURE 4
-#define LOGIN_KILL 5
-
-
-
+#include mail_common.c
 
 typedef struct Account {
     char username[MAX_USERNAME];
@@ -43,35 +22,14 @@ typedef struct Mail {
     account *sender;
     account **recipients;
     unsigned int recipients_num;
-    char mail_subject[MAX_SUBJECT];
-    char mail_body[MAX_CONTENT];
-    unsigned int mail_id;
+    char subject[MAX_SUBJECT];
+    char content[MAX_CONTENT];
 } Mail;
 
-typedef enum _eOpCode {
-    OPCODE_ERROR = 0,
-    OPCODE_SHOW_INBOX = 1,
-    OPCODE_GET_MAIL = 2,
-    OPCODE_DELETE_MAIL = 3,
-    OPCODE_COMPOSE = 4,
-    OPCODE_QUIT = 5,
-    OPCODE_PRINT = 6
-} eOpCode;
-
-// TODO complete rellevant masks
-/*
-typedef enum _eMasks
-{
-    MASK_GET_OPCODE 0xE00000,
-    MASK_GET_CLIENT_ID 0xFFFF
-} eMasks;
-*/
-
-account accounts[NUM_OF_CLIENTS];
-mail *mails[MAILS_COUNT];
+Account accounts[NUM_OF_CLIENTS];
+Mail mails[MAILS_COUNT];
 unsigned int accounts_num;
 unsigned int mails_num;
-account *curr_account;
 
 int isInt(char *str);
 
@@ -173,22 +131,20 @@ Account* getAccountByUsername(char* username) {
     return NULL;
 }
 
-void fillBufferUnknownSize(int sock, char* buff) {
-    recvall_imm(sock, buff, recieveTwoBytesAndCastToShort(sock));
-}
 
 void compose_operation(int sock, Account* account) {
-    char subject[1024], targets[1024], body[1024];
+    char subject[1024], targets[1024], content[1024];
     fillBufferUnknownSize(sock, subject);
     fillBufferUnknownSize(sock, targets);
-    fillBufferUnknownSize(sock, body);
+    fillBufferUnknownSize(sock, content);
     Mail* currentMail = &mails[mails_num];
-    currentMail->mail_subject = subject;
-    currentMail->mail_body = body;
+    currentMail->subject = subject;
+    currentMail->content = content;
     currentMail->recipients_num = 0;
     tokens = str_split(targets, ',');
     Account* tempAccount;
 
+    // code taken from stack overflow
     if (tokens)
     {
         int i;
@@ -197,44 +153,41 @@ void compose_operation(int sock, Account* account) {
             tempAccount = getAccountByUsername(*(tokens + i));
             currentMail->recipients[currentMail->recipients_num] = tempAccount;
             currentMail->recipients_num++;
+            tempAccount->inbox_mail_indices = (unsigned short *)realloc((inbox_size + 1) * sizeof(unsigned short));
+            if (tempAccount->inbox_mail_indices == NULL) {
+                perror("Failed allocating memory");
+                exit(EXIT_FAILURE);
+            }
             tempAccount->inbox_mail_indices[tempAccount->inbox_size] = mails_num;
             tempAccount->inbox_size++;
             free(*(tokens + i));
         }
-        printf("\n");
         free(tokens);
     }
     mails_num++;
-    send_to_print(sock, "Mail sent\n");
-    send_imm1(sock, 'H');
+    sendToClientPrint(sock, "Mail sent\n");
+    sendHalt(sock);
 }
 
 
 void show_inbox_operation(int sock, Account* account) {
     int i;
-    char mail_msg[1024];
+    char mail_msg[MAX_MAIL_MSG];
     for (i = 0; i < currentAccount->inbox_size; i++) {
-        if (account->inbox_mail_indices[i] == MAILS_COUNT) { continue; } // mail idx 32000 is marked as deleted
+        if (account->inbox_mail_indices[i] == MAXMAILS) { continue; } // mail idx MAXMAILS is marked as a deleted mail
         memset(mail_msg, 0);
         itoa(i, mail_msg, 10);
         strcat(mail_msg, " ");
         strcat(mail_msg, mails[account->inbox_mail_indices[i]]->sender->username);
         strcat(mail_msg, " ~");
-        strcat(mail_msg, mails[account->inbox_mail_indices[i]]->mail_subject);
+        strcat(mail_msg, mails[account->inbox_mail_indices[i]]->subject);
         strcat(mail_msg, " ~");
         strcat(mail_msg, "*\n");
-        send_to_print(sock, mail_msg);
+        sendToClientPrint(sock, mail_msg);
     }
-    send_imm1(sock, 'H'); // operation halted, now waiting for more input from user
+    sendHalt(sock);
 }
 
-short reciveTwoBytesAndCastToShort(int sock) {
-    char twoBytesFromServer[2];
-    short* result;
-    recvall_imm(sock, twoBytesFromServer, 2);
-    result = (short*)twoBytesFromServer;
-    return *result;
-}
 
 bool canRead(Mail* mail, Account* account) {
     int i;
@@ -261,36 +214,29 @@ void get_mail_operation(int sock, Account* account) {
             strcat(mail_msg, mail->recipients[i]->username);
         }
         strcat(mail_msg, "\nSubject: ");
-        strcat(mail_msg, mail->mail_subject);
+        strcat(mail_msg, mail->subject);
         strcat(mail_msg, "\nText: ");
-        strcat(mail_msg, mail->mail_body);
+        strcat(mail_msg, mail->content);
         strcat(mail_msg, "\n");
         send_to_print(sock, mail_msg);
     }
     else {
-        send_to_print(sock, "Failed to get mail\n");
+        sendToClientPrint(sock, "Failed to get mail\n");
     }
-    send_imm1(sock, 'H');
+    sendHalt(sock);
 }
 
 void delete_mail_operation(int sock, Account* account) {
     short mail_idx = recieveTwoBytesAndCastToShort(sock);
     int i;
-    if (i < account->inbox_size || account->inbox_mail_indices[i] == MAILS_COUNT) {
-        send_to_print(sock, "Invalid selection\n");
+    if (i < account->inbox_size || account->inbox_mail_indices[i] == MAXMAILS) {
+        sendToClientPrint(sock, "Invalid selection\n");
     }
     else {
-        account->inbox_mail_indices[i] == MAILS_COUNT;
+        account->inbox_mail_indices[i] == MAXMAILS;
     }
-    send_imm1(sock, 'H');
+    sendHalt(sock);
 }
-
-bool send_to_print(int sock, char* msg) {
-    send_imm1(sock, OPCODE_PRINT, 1);
-    sendall_imm(sock, strlen(msg), 2);
-    sendall_imm(sock, msg, strlen(msg));
-}
-
 int main(int argc, char *argv[]) {
     mails_num = 0;
     char *port;
@@ -298,7 +244,7 @@ int main(int argc, char *argv[]) {
     int sock, new_sock;
     socklen_t sin_size;
     struct sockaddr_in myaddr, their_addr;
-    accunt* currentAccount;
+    Accunt* currentAccount = NULL;
     if (argc > 3) {
         printf("Incorrect Argument Count");
         exit(1);
@@ -381,66 +327,52 @@ bool read_file(char *path) {
 }
 
 
-account* loginToAccount(int sock) {
+Account* loginToAccount(int sock) {
     int i, auth_attempts = 0;
-    char username[1024] = {0};
-    char password[1024] = {0};
+    char username[MAX_USERNAME] = {0};
+    char password[MAX_PASSWORD] = {0};
     char user_len;
     char password_len;
     while (true) {
-        send_imm1(sock, ASK_USER);
-        recvall_imm(sock, &user_len, 1);
-        recvall(sock, username, user_len);
-        send_imm1(sock, ASK_PASS);
-        recvall_imm(sock, &password_len, 1);
-        recvall(sock, password, password_len);
-
+        send_char(sock, LOG_INIT);
+        getData(sock, username);
+        getData(sock, password);
         for (i = 0; i < users_num; i++) {
             if ((strcmp(accounts[i].username, username) == 0) && (strcmp(accounts[i].password, password) == 0)) {
-                send_imm1(sock, LOGIN_SUCCESS);
+                send_char(sock, LOG_SUCCESS);
                 return &accounts[i];
             }
         }
 
-        send_imm1(sock, LOGIN_FAILURE);
+        send_char(sock, LOG_FAILURE);
         auth_attempts += 1;
         if (auth_attempts == 3) {
-            send_imm1(sock, LOGIN_KILL);
-            perror("Error receiving data from client");
+            send_char(sock, LOGIN_KILL);
             return NULL;
         }
     }
 }
 
-void serverLoop(int sock, account* currentAccount) {
+void serverLoop(int sock, Account* currentAccount) {
     // when here, after sock establishment and user auth. keep listening for ops
 
-    char op;
-
     while (true) {
-        op = recv_imm1(sock);
-        switch (op) {
-            /* SHOW_INBOX operation*/
-            case eOpCode.OPCODE_SHOW_INBOX:
+        switch (recv_char(sock)) {
+            case OP_SHOWINBOX:
                 show_inbox_operation(sock, currentAccount);
                 break;
-                /* GET_MAIL operation*/
-            case eOpCode.OPCODE_GET_MAIL:
+            case OP_GETMAIL:
                 get_mail_operation(sock, currentAccount);
                 break;
-                /* DELETE_MAIL operation*/
-            case eOpCode.OPCODE_DELETE_MAIL:
+            case OP_DELETEMAIL:
                 delete_mail_operation(sock, currentAccount);
                 break;
-                /* QUIT operation*/
-            case eOpCode.OPCODE_QUIT:
+            case OP_QUIT:
                 quit_operation(sock);
                 return;
-                /* COMPOSE operation*/
-            case eOpCode.OPCODE_COMPOSE:
+            case OP_COMPOSE:
                 compose_operation(sock, currentAccount);
                 break;
-
         }
     }
 }
@@ -457,59 +389,7 @@ int isInt(char *str) {
     return 1;
 }
 
-int sendall(int sock, char *buf, int *len) {
-    /* sendall code as seen in recitation*/
-    int total = 0; /* how many bytes we've sent */
-    int bytesleft = *len; /* how many we have left to send */
-    int n;
-    while (total < *len) {
-        n = send(sock, buf + total, bytesleft, 0);
-        if (n == -1) { break; }
-        total += n;
-        bytesleft -= n;
-    }
-    *len = total; /* return number actually sent here */
-    return n == -1 ? -1 : 0; /*-1 on failure, 0 on success */
-}
 
-int recvall(int sock, char *buf, int *len) {
-    int total = 0; /* how many bytes we've read */
-    int bytesleft = *len; /* how many we have left to read */
-    int n;
-    while (total < *len) {
-        n = recv(sock, buf + total, bytesleft, 0);
-        if (n == -1) { break; }
-        if (n == 0) {
-            *len = 0;
-            n = -1;
-            break;
-        }
-        total += n;
-        bytesleft -= n;
-    }
-    *len = total; /* return number actually sent here */
-    return n == -1 ? -1 : 0; /*-1 on failure, 0 on success */
-}
-
-int sendall_imm(int sock, char* buf, int len) {
-    int temp = len;
-    return sendall(sock, buf, &temp);
-}
-
-int send_imm1(int sock, char msg) {
-    sendall_imm(sock, &msg, 1);
-}
-
-int recvall_imm(int sock, char* buf, int len) {
-    int temp = len;
-    return recvall(sock, buf, &temp);
-}
-
-char recv_imm1(int sock) {
-    char temp;
-    recvall_imm(sock, &temp, 1);
-    return temp;
-}
 
 void tryClose(int sock) {
     if (close(sock) < 0) {

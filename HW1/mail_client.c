@@ -9,6 +9,8 @@
 #include <errno.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <mail_common.c>
+
 
 #define BUF_SIZE 4096
 #define MAX_USERNAME_LENGTH 32
