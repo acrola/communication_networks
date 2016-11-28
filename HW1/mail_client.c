@@ -1,22 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <errno.h>
-#include <ctype.h>
-#include <unistd.h>
 #include "mail_common.h"
-#include <stdbool.h>
-
-
-#define BUF_SIZE 4096
-#define MAX_USERNAME_LENGTH 32
-#define MAX_PASSWORD_LENGTH 32
-#define MAX_INPUT_ATTEMPTS 3
 
 #define SHOW_INBOX_STR "SHOW_INBOX"
 #define GET_MAIL_STR "GET_MAIL"
@@ -24,38 +6,13 @@
 #define COMPOSE_STR "COMPOSE"
 #define QUIT_STR "QUIT"
 
-void tryClose(int sockfd)
-{
-    if (sockfd == -1) // invalid sockfd - occurs only if "socket" fails, and it is in prpose
-    {
-        return;
-    }
-    if (close(sockfd) < 0)
-    {
-        perror("Could not close socket");
-        exit(EXIT_FAILURE);
-    }
-}
-
-
-void trySysCall(int syscallResult, const char *msg, int sockfd)
-{
-    if (syscallResult < 0)
-    {
-        perror(msg);
-        tryClose(sockfd);
-        exit(EXIT_FAILURE);
-    }
-}
-
-
 void sendData(int sockfd, char *buf)
 {
     int dataLength = htons((uint16_t) strlen(buf));
     int dataLengthBytes = sizeof(dataLength);
 
     //send data length
-    trySysCall(sendall(sockfd, (char*)&dataLength, &dataLengthBytes), "Failed to send data length", sockfd);
+    trySysCall(sendall(sockfd, (char *) &dataLength, &dataLengthBytes), "Failed to send data length", sockfd);
 
     //send the real data
     trySysCall(sendall(sockfd, buf, &dataLength), "Failed to send data", sockfd);
@@ -116,31 +73,37 @@ bool connectToServer(int sockfd, char *hostname, char *port)
     establishInitialConnection(sockfd, hostname, port);
 
     char byteFromServer;
-    while (true) {
+    while (true)
+    {
         recv_imm1(sockfd, &byteFromServer);
-        if (byteFromServer == ASK_USER) {
+        if (byteFromServer == ASK_USER)
+        {
             printf("Enter username\n");
             fgets(buf, BUF_SIZE, stdin);
             send_imm1(sockfd, strlen(buf));
             sendall(sockfd, buf, strlen(byteFromServer));
             continue;
         }
-        else if (byteFromServer == ASK_PASSWORD) {
+        else if (byteFromServer == ASK_PASSWORD)
+        {
             printf("Enter password\n");
             fgets(buf, BUF_SIZE, stdin);
             send_imm1(sockfd, strlen(buf));
             sendall(sockfd, buf, strlen(byteFromServer));
             continue;
         }
-        else if (byteFromServer == LOGIN_FAILURE) {
+        else if (byteFromServer == LOGIN_FAILURE)
+        {
             printf("Login failed\n");
             continue;
         }
-        else if (byteFromServer == LOGIN_SUCCESS) {
+        else if (byteFromServer == LOGIN_SUCCESS)
+        {
             printf("Login successful\n");
             return true;
         }
-        else if (byteFromServer == LOGIN_KILL) {
+        else if (byteFromServer == LOGIN_KILL)
+        {
             printf("Login attempt killed\n");
             return false;
         }
@@ -205,9 +168,6 @@ void establishInitialConnection(int sockfd, char *hostname, char *port)
 
 
 
-
-
-
 void shutdownSocket(int sock)
 {
     int res = 0;
@@ -243,7 +203,7 @@ void analyzeProgramArguments(int argc, char **argv, char **hostname, char **port
     /* place default hostname if required*/
     if (argc == 1)
     {
-        *hostname = "localhost";
+        *hostname = DEFAULT_HOSTNAME;
     }
     else
     {
@@ -253,7 +213,7 @@ void analyzeProgramArguments(int argc, char **argv, char **hostname, char **port
     /* place default port if required*/
     if (argc < 3)
     {
-        *port = "6423";
+        *port = DEFAULT_PORT;
     }
     else
     {
@@ -263,23 +223,22 @@ void analyzeProgramArguments(int argc, char **argv, char **hostname, char **port
 
 
 
-
 void validateUser(int sockfd)
 {
     int attemptsLeft = MAX_INPUT_ATTEMPTS;
-    char buf[BUF_SIZE], username[MAX_USERNAME_LENGTH], password[MAX_PASSWORD_LENGTH];
+    char buf[BUF_SIZE], username[MAX_USERNAME], password[MAX_PASSWORD];
     char serverAnswer;
     do
     {
         //zero all buffers
         memset(buf, 0, BUF_SIZE);
-        memset(username, 0, MAX_USERNAME_LENGTH);
-        memset(password, 0, MAX_PASSWORD_LENGTH);
+        memset(username, 0, MAX_USERNAME);
+        memset(password, 0, MAX_PASSWORD);
         serverAnswer = 0;
 
         //get username and password from user
-        getInputFromUser(username, "User:", "username", MAX_USERNAME_LENGTH, sockfd);
-        getInputFromUser(password, "Password:", "password", MAX_PASSWORD_LENGTH, sockfd);
+        getInputFromUser(username, "User:", "username", MAX_USERNAME, sockfd);
+        getInputFromUser(password, "Password:", "password", MAX_PASSWORD, sockfd);
 
         //copy the data to buf in the form of "<username>\t<password>" and send to the server for validation
         strcpy(buf, username);
@@ -335,24 +294,11 @@ void getInputFromUser(char *fieldBuf, const char *fieldPrefix, const char *field
     strcpy(fieldBuf, token);
 }
 
-typedef enum _eOpCode
-{
-    OPCODE_ERROR = 0,
-    OPCODE_SHOW_INBOX = 1,
-    OPCODE_GET_MAIL = 2,
-    OPCODE_DELETE_MAIL = 3,
-    OPCODE_COMPOSE = 4,
-    OPCODE_QUIT = 5
-} eOpCode;
-
-
 void shutdownSocket(int sock);
 
 int sendall(int sock, void *buf, int *len);
 
 void connectToServer(int sockfd, char *hostname, char *port);
-
-void tryClose(int sockfd);
 
 int recvall(int sock, void *buf, int *len);
 
@@ -364,8 +310,6 @@ void establishInitialConnection(int sockfd, char *hostname, char *port);
 
 void recvData(int sockfd, char *buf);
 
-void trySysCall(int syscallResult, const char *msg, int sockfd);
-
 void validateUser(int sockfd);
 
 void sendData(int sockfd, char *buf);
@@ -375,25 +319,29 @@ void getInputFromUser(char *fieldBuf, const char *fieldPrefix, const char *field
 char getOpCode(char *token);
 
 
-void print_from_server(sock) {
-    char text_msg[MAX_MAIL_MSG];
-    getData(sock, text_msg);
-    printf(text_msg);
+void print_from_server(int sockfd)
+{
+    char buf[BUF_SIZE] = {0};
+    getData(sockfd, buf);
+    printf("%s", buf);
 }
 
-void log_failure_handler() {
+void log_failure_handler()
+{
     printf("Failed logging to server, exiting...\n");
 }
 
-void quit_operation() {
+void quit_operation()
+{
 
 }
 
-void get_operation_from_user(sock, char* clientIsActive) {
-    char text_msg[MAX_MAIL_MSG];
-    memset(text_msg, 0, MAX_MAIL_MSG);
+void get_operation_from_user(sock, char *clientIsActive)
+{
+    char text_msg[BUF_SIZE];
+    memset(text_msg, 0, BUF_SIZE);
     //get input from user
-    if (!fgets(text_msg, MAX_MAIL_MSG, stdin))
+    if (!fgets(text_msg, BUF_SIZE, stdin))
     {
         printf("Error getting input from user\n");
         break;
@@ -425,7 +373,7 @@ void get_operation_from_user(sock, char* clientIsActive) {
             //3 loops - To, Subject, Text
             for (int i = 0; i < 3; ++i)
             {
-                if (!fgets(text_msg + mailLength, MAX_MAIL_MSG - mailLength, stdin))
+                if (!fgets(text_msg + mailLength, BUF_SIZE - mailLength, stdin))
                 {
                     printf("Error getting input from user (compose)\n");
                     break;
@@ -460,7 +408,7 @@ int main(int argc, char *argv[])
 
     analyzeProgramArguments(argc, argv, &hostname, &port);
 
-    /* open TCP socket with IPv4*/
+    // open TCP socket with IPv4
     // (no opened socket yet - hence we pass a -1 as a sockfd)
     trySysCall((sockfd = socket(PF_INET, SOCK_STREAM, 0)), "Error in opening client's socket", -1);
 
@@ -471,9 +419,11 @@ int main(int argc, char *argv[])
     // loop runs as long as the client wants to get data and no errors occur.
     // if the client quits or an error occurs - the clientIsActive is set to 0,
     // we get out of the loop and shutdown the client program gracefully
-    while (clientIsActive) {
+    while (clientIsActive)
+    {
 
-        switch (recv_char(sock)) {
+        switch (recv_char(sock))
+        {
             case LOG_REQUEST:
                 start_login_request(sock);
                 break;

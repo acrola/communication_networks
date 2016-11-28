@@ -82,6 +82,7 @@ short recieveTwoBytesAndCastToShort(int sock)
     short *result;
     recvall_imm(sock, twoBytesFromServer, 2);
     result = (short *) twoBytesFromServer;
+    *result = ntohs((uint16_t)*result);
     return *result;
 }
 
@@ -109,4 +110,27 @@ void sendToClientPrint(int sock, char *msg)
 void sendHalt(int sock)
 {
     send_char(sock, OP_HALT);
+}
+
+void trySysCall(int syscallResult, const char *msg, int sockfd)
+{
+    if (syscallResult < 0)
+    {
+        perror(msg);
+        tryClose(sockfd);
+        exit(EXIT_FAILURE);
+    }
+}
+
+void tryClose(int sockfd)
+{
+    if (sockfd == -1) // invalid sockfd - occurs only if "socket" fails, and it is in prpose
+    {
+        return;
+    }
+    if (close(sockfd) < 0)
+    {
+        perror("Could not close socket");
+        exit(EXIT_FAILURE);
+    }
 }

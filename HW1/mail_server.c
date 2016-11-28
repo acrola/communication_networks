@@ -1,14 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <unistd.h>
-#include <errno.h>
-#include <ctype.h>
-#include <stdbool.h>
 #include "mail_common.h"
 
 typedef struct Account {
@@ -19,15 +8,15 @@ typedef struct Account {
 } Account;
 
 typedef struct Mail {
-    account *sender;
-    account **recipients;
+    Account *sender;
+    Account **recipients;
     unsigned int recipients_num;
     char subject[MAX_SUBJECT];
     char content[MAX_CONTENT];
 } Mail;
 
 Account accounts[NUM_OF_CLIENTS];
-Mail mails[MAILS_COUNT];
+Mail mails[MAXMAILS];
 
 unsigned int accounts_num; // value will be init'ed in read_file() ...
 unsigned int mails_num = 0;
@@ -42,7 +31,7 @@ void read_file(char *path);
 
 void parseMessage(int sock, unsigned char type, unsigned int nums);
 
-void serverLoop(int sock);
+void serverLoop(int sock, Account* currentAccount);
 
 void show_inbox_operation(int sock, Account* account);
 
@@ -158,10 +147,10 @@ void compose_operation(int sock, Account* account) {
 
 void show_inbox_operation(int sock, Account* account) {
     int i;
-    char mail_msg[MAX_MAIL_MSG];
+    char mail_msg[BUF_SIZE];
     for (i = 0; i < currentAccount->inbox_size; i++) {
         if (account->inbox_mail_indices[i] == MAXMAILS) { continue; } // mail idx MAXMAILS is marked as a deleted mail
-        memset(mail_msg, 0, MAX_MAIL_MSG);
+        memset(mail_msg, 0, BUF_SIZE);
         itoa(i, mail_msg, 10);
         strcat(mail_msg, " ");
         strcat(mail_msg, mails[account->inbox_mail_indices[i]]->sender->username);
@@ -189,9 +178,9 @@ void get_mail_operation(int sock, Account* account) {
     short mail_idx = recieveTwoBytesAndCastToShort(sock);
     int i;
     Mail* currentMail = &mails[mail_idx];
-    char mail_msg[MAX_MAIL_MSG];
+    char mail_msg[BUF_SIZE];
     if (canRead(mail, account)) {
-        memset(mail_msg, 0, MAX_MAIL_MSG);
+        memset(mail_msg, 0, BUF_SIZE);
         strcat(mail_msg, "From: ");
         strcat(mail_msg, mail->sender->username);
         strcat(mail_msg, "\nTo: ");
@@ -230,7 +219,7 @@ int main(int argc, char *argv[]) {
     int sock, new_sock;
     socklen_t sin_size;
     struct sockaddr_in myaddr, their_addr;
-    Accunt* currentAccount = NULL;
+    Account *currentAccount = NULL;
     if (argc > 3) {
         printf("Incorrect Argument Count");
         exit(1);

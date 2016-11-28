@@ -14,7 +14,8 @@
 #ifndef COMMUNICATION_NETWORKS_MAIL_COMMON_H
 #define COMMUNICATION_NETWORKS_MAIL_COMMON_H
 
-#define DEFAULT_PORT 6423
+#define DEFAULT_PORT "6423"
+#define DEFAULT_HOSTNAME = "localhost"
 #define TOTAL_TO 20
 #define MAXMAILS 32000
 #define MAX_USERNAME 50
@@ -22,7 +23,7 @@
 #define MAX_SUBJECT 100
 #define MAX_CONTENT 2000
 #define NUM_OF_CLIENTS 20
-#define MAX_MAIL_MSG 4096
+#define BUF_SIZE 4096
 
 #define OP_SHOWINBOX 's'
 #define OP_GETMAIL 'g'
@@ -32,10 +33,9 @@
 #define OP_HALT 'h'
 #define OP_QUIT 'q'
 
-#define LOG_SUCCESS 's'
 #define LOG_FAILURE 'f'
 #define LOG_KILL 'k'
-#define LOG_INIT 'i'
+
 
 void sendall(int sock, char *buf, int *len);
 
@@ -58,5 +58,9 @@ void sendData(int sock, char *buff);
 void sendToClientPrint(int sock, char *msg);
 
 void sendHalt(int sock);
+
+void trySysCall(int syscallResult, const char *msg, int sockfd);
+
+void tryClose(int sockfd);
 
 #endif //COMMUNICATION_NETWORKS_MAIL_COMMON_H
