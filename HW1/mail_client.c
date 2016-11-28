@@ -42,59 +42,14 @@
 char getOpCode(char *token);
 
 
-bool connectToServer(int sockfd, char *hostname, char *port)
+void start_login_request(int sockfd, char *hostname, char *port)
 {
-    char buf[BUF_SIZE];
-
-    //establish the initial connection with the server
-    establishInitialConnection(sockfd, hostname, port);
-
-    char byteFromServer;
-    while (true)
-    {
-        recv_imm1(sockfd, &byteFromServer);
-        if (byteFromServer == ASK_USER)
-        {
-            printf("Enter username\n");
-            fgets(buf, BUF_SIZE, stdin);
-            send_imm1(sockfd, strlen(buf));
-            sendall(sockfd, buf, strlen(byteFromServer));
-            continue;
-        }
-        else if (byteFromServer == ASK_PASSWORD)
-        {
-            printf("Enter password\n");
-            fgets(buf, BUF_SIZE, stdin);
-            send_imm1(sockfd, strlen(buf));
-            sendall(sockfd, buf, strlen(byteFromServer));
-            continue;
-        }
-        else if (byteFromServer == LOGIN_FAILURE)
-        {
-            printf("Login failed\n");
-            continue;
-        }
-        else if (byteFromServer == LOGIN_SUCCESS)
-        {
-            printf("Login successful\n");
-            return true;
-        }
-        else if (byteFromServer == LOGIN_KILL)
-        {
-            printf("Login attempt killed\n");
-            return false;
-        }
-    }
-    /*
-   //The client needs to recieve the server's welcome message
-     recvData(sockfd, buf);
-    //print welcome message
-    printf("%s", buf);
-    //now the client takes username and password from the user and validates then with the server:
-    validateUser(sockfd);
-    // if we got here - connection succeeded
-    printf("Connected to server\n");
-    */
+    char username[MAX_USERNAME] = {0};
+    char password[MAX_PASSWORD] = {0};
+    getInputFromUser(username, "User:", "username", MAX_USERNAME, sockfd);
+    getInputFromUser(password, "Password:", "password", MAX_PASSWORD, sockfd);
+    sendData(username, buf);
+    sendData(password, buf);
 }
 
 
@@ -200,7 +155,7 @@ void analyzeProgramArguments(int argc, char **argv, char **hostname, char **port
 
 
 
-void validateUser(int sockfd)
+/*void validateUser(int sockfd)
 {
     int attemptsLeft = MAX_INPUT_ATTEMPTS;
     char buf[BUF_SIZE], username[MAX_USERNAME], password[MAX_PASSWORD];
@@ -237,7 +192,7 @@ void validateUser(int sockfd)
     tryClose(sockfd);
     exit(EXIT_FAILURE);
 
-}
+}*/
 
 void getInputFromUser(char *fieldBuf, const char *fieldPrefix, const char *fieldName, int maxFieldLength, int sockfd)
 {
@@ -392,12 +347,13 @@ int main(int argc, char *argv[])
     trySysCall((sockfd = socket(PF_INET, SOCK_STREAM, 0)), "Error in opening client's socket", -1);
 
     /* connect to server*/
-    connectToServer(sockfd, hostname, port);
+    //connectToServer(sockfd, hostname, port);
 
     clientIsActive = true;
     // loop runs as long as the client wants to get data and no errors occur.
     // if the client quits or an error occurs - the clientIsActive is set to 0,
     // we get out of the loop and shutdown the client program gracefully
+    establishInitialConnection(sockfd, hostname, port);
     while (clientIsActive)
     {
 
