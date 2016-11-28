@@ -1,7 +1,7 @@
 all: mail_client mail-server 
 
 clean:
-	-rm mail_client.o mail_server.o mail_common.o mail_client mail_server mail_common
+	-rm mail_client.o mail_server.o mail_common.o mail_client mail_server
 
 mail_client: mail_client.o mail_common.o
 	gcc -o mail_client mail_client.o mail_common.o -lm -pedantic-errors -Wall -g
