@@ -134,9 +134,9 @@ Account* getAccountByUsername(char* username) {
 
 void compose_operation(int sock, Account* account) {
     char subject[1024], targets[1024], content[1024];
-    fillBufferUnknownSize(sock, subject);
-    fillBufferUnknownSize(sock, targets);
-    fillBufferUnknownSize(sock, content);
+    getData(sock, subject);
+    getData(sock, targets);
+    getData(sock, content);
     Mail* currentMail = &mails[mails_num];
     currentMail->subject = subject;
     currentMail->content = content;
@@ -326,7 +326,6 @@ bool read_file(char *path) {
     return true;
 }
 
-
 Account* loginToAccount(int sock) {
     int i, auth_attempts = 0;
     char username[MAX_USERNAME] = {0};
@@ -334,17 +333,17 @@ Account* loginToAccount(int sock) {
     char user_len;
     char password_len;
     while (true) {
-        send_char(sock, LOG_INIT);
+        send_char(sock, LOG_REQUEST);
         getData(sock, username);
         getData(sock, password);
         for (i = 0; i < users_num; i++) {
             if ((strcmp(accounts[i].username, username) == 0) && (strcmp(accounts[i].password, password) == 0)) {
-                send_char(sock, LOG_SUCCESS);
+                sendHalt(sock);
                 return &accounts[i];
             }
         }
 
-        send_char(sock, LOG_FAILURE);
+        send_char(sock, LOG_REQUEST);
         auth_attempts += 1;
         if (auth_attempts == 3) {
             send_char(sock, LOGIN_KILL);

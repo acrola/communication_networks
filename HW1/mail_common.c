@@ -13,18 +13,16 @@
 #define NUM_OF_CLIENTS 20
 #define MAX_MAIL_MSG 4096
 
-#define OP_SHOWINBOX 's'
-#define OP_GETMAIL 'g'
-#define OP_DELETEMAIL 'd'
-#define OP_COMPOSE 'c'
-#define OP_PRINT 'p'
-#define OP_HALT 'h'
-#define OP_QUIT 'q'
+#define OP_SHOWINBOX 'S'
+#define OP_GETMAIL 'G'
+#define OP_DELETEMAIL 'D'
+#define OP_COMPOSE 'C'
+#define OP_PRINT 'P'
+#define OP_HALT 'H'
+#define OP_QUIT 'Q'
 
-#define LOG_SUCCESS 's'
-#define LOG_FAILURE 'f'
-#define LOG_KILL 'k'
-#define LOG_INIT 'i'
+#define LOG_KILL 'K'
+#define LOG_REQUEST 'L'
 
 void sendall(int sock, char *buf, int *len) {
     /* sendall code as seen in recitation*/
@@ -94,7 +92,7 @@ short recieveTwoBytesAndCastToShort(int sock) {
 
 void getData(int sock, char* buff) {
     short bytesToRead = recieveTwoBytesAndCastToShort(sock);
-    recvall_imm(sock, buff, bytesToRead);
+    recvall(sock, buff, &bytesToRead);
     buff[bytesToRead] = '\0';
 }
 void sendData(int sock, char* buff) {
