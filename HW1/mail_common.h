@@ -34,7 +34,7 @@
 #define OP_QUIT 'q'
 #define OP_ERROR '0'
 
-#define LOG_FAILURE 'f'
+#define LOG_REQUEST 'r'
 #define LOG_KILL 'k'
 
 

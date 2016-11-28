@@ -227,7 +227,7 @@ void print_from_server(int sockfd)
     printf("%s", buf);
 }
 
-void log_failure_handler()
+void log_kill_handler()
 {
     printf("Failed logging to server, exiting...\n");
 }
@@ -317,12 +317,12 @@ int main(int argc, char *argv[])
 
     /* connect to server*/
     //connectToServer(sockfd, hostname, port);
+    establishInitialConnection(sockfd, hostname, port);
 
     clientIsActive = true;
     // loop runs as long as the client wants to get data and no errors occur.
     // if the client quits or an error occurs - the clientIsActive is set to 0,
     // we get out of the loop and shutdown the client program gracefully
-    establishInitialConnection(sockfd, hostname, port);
     while (clientIsActive)
     {
 
@@ -331,8 +331,8 @@ int main(int argc, char *argv[])
             case LOG_REQUEST:
                 start_login_request(sock);
                 break;
-            case LOG_FAILURE:
-                log_failure_handler(); // what is the difference between this and OP_QUIT...? server disconnected us anyway. consider union
+            case LOG_KILL:
+                log_kill_handler(); // what is the difference between this and OP_QUIT...? server disconnected us anyway. consider union
                 clientIsActive = 0;
                 break;
             case OP_PRINT:

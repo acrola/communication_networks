@@ -319,9 +319,11 @@ Account* loginToAccount(int sock) {
             }
         }
 
+        sendToClientPrint(sock, "LOGIN ATTEMPT FAILED\n");
         send_char(sock, LOG_REQUEST);
         auth_attempts += 1;
         if (auth_attempts >= AUTH_ATTEMPTS) {
+            sendToClientPrint(sock, "LOGIN FAILED - GOT KILL FROM SERVER\n");
             send_char(sock, LOG_KILL);
             return NULL;
         }
