@@ -9,7 +9,7 @@
 #include <errno.h>
 #include <ctype.h>
 #include <stdbool.h>
-#include mail_common.c
+#include "mail_common.h"
 
 typedef struct Account {
     char username[MAX_USERNAME];

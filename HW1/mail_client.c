@@ -9,7 +9,7 @@
 #include <errno.h>
 #include <ctype.h>
 #include <unistd.h>
-#include <mail_common.c>
+#include "mail_common.h"
 #include <stdbool.h>
 
 
