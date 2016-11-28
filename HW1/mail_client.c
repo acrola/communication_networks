@@ -6,50 +6,19 @@
 #define COMPOSE_STR "COMPOSE"
 #define QUIT_STR "QUIT"
 
-//void sendData(int sockfd, char *buf)
-//{
-//    int dataLength = htons((uint16_t) strlen(buf));
-//    int dataLengthBytes = sizeof(dataLength);
-//
-//    //send data length
-//    trySysCall(sendall(sockfd, (char *) &dataLength, &dataLengthBytes), "Failed to send data length", sockfd);
-//
-//    //send the real data
-//    trySysCall(sendall(sockfd, buf, &dataLength), "Failed to send data", sockfd);
-//}
-//
-//
-//void recvData(int sockfd, char *buf)
-//{
-//    int dataLength = 0;
-//    int dataLengthBytes = sizeof(dataLength);
-//
-//    //receive data length
-//    trySysCall(recvall(sockfd, &dataLength, &dataLengthBytes), "Failed to receive data length", sockfd);
-//
-//    //translate length to host architecture
-//    dataLength = ntohs((uint16_t) dataLength);
-//
-//    //zero buf
-//    memset(buf, 0, BUF_SIZE);
-//
-//    //receive the real data
-//    trySysCall(recvall(sockfd, buf, &dataLength), "Failed to receive data", sockfd);
-//}
-
 
 
 char getOpCode(char *token);
 
 
-void start_login_request(int sockfd, char *hostname, char *port)
+void start_login_request(int sockfd)
 {
     char username[MAX_USERNAME] = {0};
     char password[MAX_PASSWORD] = {0};
     getInputFromUser(username, "User:", "username", MAX_USERNAME, sockfd);
     getInputFromUser(password, "Password:", "password", MAX_PASSWORD, sockfd);
-    sendData(username, buf);
-    sendData(password, buf);
+    sendData(sockfd, username);
+    sendData(sockfd, password);
 }
 
 
@@ -379,95 +348,9 @@ int main(int argc, char *argv[])
             default:;
 
         }
-
-/*
-        //zero buf
-        memset(buf, 0, BUF_SIZE);
-        //get input from user
-        if (!fgets(buf, BUF_SIZE, stdin))
-        {
-            printf("Error getting input from user\n");
-            break;
-        }
-        token = strtok(buf, " \t\r");
-        char opCode = getOpCode(token);
-
-        // if opcode is valid - send it to the server (o.w we ask the user to try again)
-        if (opCode != OPCODE_ERROR)
-        {
-            trySysCall(send(sockfd, &opCode, sizeof(char), 0), "Sending opcode to server failed", 0);
-        }
-        switch (opCode)
-        {
-            case OPCODE_SHOW_INBOX:
-                //todo - what about the edge case where a user has 32000 mails of maximal length..?
-                // receive inbox data
-                recvData(sockfd, buf);
-                printf("%s", buf);
-                break;
-            case OPCODE_GET_MAIL:
-                token = strtok(NULL, " \t\r\n");
-                mailId = htons((uint16_t) strtol(token, NULL, 10));
-
-                // send mail id
-                if (sendall(sockfd, &mailId, &mailIdSize) < 0)
-                {
-                    perror("Sending mail ID to server failed");
-                    clientIsActive = 0;
-                    break;
-                }
-                // receive data
-                recvData(sockfd, buf);
-                printf("%s", buf);
-                break;
-            case OPCODE_DELETE_MAIL:
-                token = strtok(NULL, " \t\r\n");
-                mailId = htons((uint16_t) strtol(token, NULL, 10));
-
-                // send mail id
-                if (sendall(sockfd, &mailId, &mailIdSize) < 0)
-                {
-                    perror("Sending mail ID to server failed");
-                    clientIsActive = 0;
-                    break;
-                }
-                //todo - maybe receive an OK from the server (that the mail was actually deleted)?
-                break;
-            case OPCODE_COMPOSE:
-
-                mailLength = 0;
-                //3 loops - To, Subject, Text
-                for (int i = 0; i < 3; ++i)
-                {
-                    if (!fgets(buf + mailLength, BUF_SIZE - mailLength, stdin))
-                    {
-                        printf("Error getting input from user (compose)\n");
-                        break;
-                    }
-                    //update mail length
-                    mailLength = strlen(buf);
-
-                }
-
-                sendData(sockfd, buf);
-                printf("%s", buf);
-                break;
-            case OPCODE_QUIT:
-                //todo - do we really need to let the server know we're quitting? if not - change above..
-                clientIsActive = 0;
-                break;
-            case OPCODE_ERROR:
-            default:
-                printf("Invalid operation. Please try again.\n");
-                break;
-        }
-    }
-    //close socket and exit
-*/
     }
     tryClose(sockfd);
     return EXIT_SUCCESS;
-
 }
 
 char getOpCode(char *token)
