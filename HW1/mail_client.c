@@ -10,6 +10,7 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <mail_common.c>
+#include <stdbool.h>
 
 
 #define BUF_SIZE 4096
