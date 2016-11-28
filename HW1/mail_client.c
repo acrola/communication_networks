@@ -296,11 +296,11 @@ void getInputFromUser(char *fieldBuf, const char *fieldPrefix, const char *field
 
 void shutdownSocket(int sock);
 
-int sendall(int sock, void *buf, int *len);
+
 
 void connectToServer(int sockfd, char *hostname, char *port);
 
-int recvall(int sock, void *buf, int *len);
+
 
 void analyzeProgramArguments(int argc, char *argv[], char **hostname, char **port);
 

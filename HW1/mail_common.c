@@ -1,6 +1,6 @@
 #include "mail_common.h"
 
-void sendall(int sock, char *buf, int *len)
+void sendall(int sockfd, void *buf, int *len)
 {
     /* sendall code as seen in recitation*/
     int total = 0; /* how many bytes we've sent */
@@ -8,7 +8,7 @@ void sendall(int sock, char *buf, int *len)
     int n = 0;
     while (total < *len)
     {
-        n = send(sock, buf + total, (size_t) bytesleft, 0);
+        n = send(sockfd, buf + total, (size_t) bytesleft, 0);
         if (n == -1)
         {
             break;
@@ -19,24 +19,24 @@ void sendall(int sock, char *buf, int *len)
     *len = total; /* return number actually sent here */
     if (n == -1)
     {
-        perror("Failed sending through socket");
+        perror("Failed sending data");
         exit(errno);
     }
 }
 
-void sendall_imm(int sock, char *buf, int len)
+void sendall_imm(int sockfd, void *buf, int len)
 {
-    sendall(sock, buf, &len);
+    sendall(sockfd, buf, &len);
 }
 
-void recvall(int sock, char *buf, int *len)
+void recvall(int sockfd, void *buf, int *len)
 {
     int total = 0; /* how many bytes we've read */
     int bytesleft = *len; /* how many we have left to read */
     int n = 0;
     while (total < *len)
     {
-        n = recv(sock, buf + total, (size_t) bytesleft, 0);
+        n = recv(sockfd, buf + total, (size_t) bytesleft, 0);
         if (n == -1)
         {
             break;
@@ -53,52 +53,55 @@ void recvall(int sock, char *buf, int *len)
     *len = total; /* return number actually sent here */
     if (n == -1)
     {
-        perror("Failed sending through socket");
+        perror("Failed receiving data");
         exit(errno);
     }
 }
 
 
-void recvall_imm(int sock, char *buf, int len)
+void recvall_imm(int sockfd, void *buf, int len)
 {
-    recvall(sock, buf, &len);
+    recvall(sockfd, buf, &len);
 }
 
-void send_char(int sock, char c)
+void send_char(int sockfd, char c)
 {
-    sendall_imm(sock, &c, 1);
+    char toSend = c;
+    trySysCall(send(sockfd, &toSend, 1, 0), "Failed to send char", sockfd);
 }
 
-char recv_char(int sock)
+char recv_char(int sockfd)
 {
     char c;
-    recvall_imm(sock, &c, 1);
+    trySysCall(recv(sockfd, &c, 1, 0), "Failed to receive char", sockfd);
     return c;
 }
 
-short recieveTwoBytesAndCastToShort(int sock)
+short getDataSize(int sockfd)
 {
-    char twoBytesFromServer[2];
-    short *result;
-    recvall_imm(sock, twoBytesFromServer, 2);
-    result = (short *) twoBytesFromServer;
-    *result = ntohs((uint16_t)*result);
-    return *result;
+    short dataSize;
+    recvall_imm(sockfd, &dataSize, 2);
+    dataSize = ntohs((uint16_t) dataSize);
+    return dataSize;
 }
 
 
-void getData(int sock, char *buff)
+void getData(int sockfd, char *buf)
 {
-    short bytesToRead = recieveTwoBytesAndCastToShort(sock);
-    recvall_imm(sock, buff, bytesToRead);
-    buff[bytesToRead] = '\0';
+    short dataSize = getDataSize(sockfd);
+    recvall_imm(sockfd, buf, dataSize);
+    buf[dataSize] = '\0'; //null terminator to termiante the string
 }
 
-void sendData(int sock, char *buff)
+void sendData(int sockfd, char *buf)
 {
-    short bytesToSend = (short) strlen(buff);
-    sendall_imm(sock, buff, bytesToSend);
-    send_char(sock, '\0');
+    short dataSize = (short) strlen(buf);
+    //cast to network order
+    short dataSize_networkOrder = htons((uint16_t) dataSize);
+    // send data size
+    sendall_imm(sockfd, &dataSize_networkOrder, 2);
+    //send data
+    sendall_imm(sockfd, buf, dataSize);
 }
 
 void sendToClientPrint(int sock, char *msg)
@@ -118,7 +121,7 @@ void trySysCall(int syscallResult, const char *msg, int sockfd)
     {
         perror(msg);
         tryClose(sockfd);
-        exit(EXIT_FAILURE);
+        exit(errno);
     }
 }
 
@@ -131,6 +134,6 @@ void tryClose(int sockfd)
     if (close(sockfd) < 0)
     {
         perror("Could not close socket");
-        exit(EXIT_FAILURE);
+        exit(errno);
     }
 }

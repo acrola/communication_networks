@@ -175,7 +175,7 @@ bool canRead(Mail* mail, Account* account) {
 }
 
 void get_mail_operation(int sock, Account* account) {
-    short mail_idx = recieveTwoBytesAndCastToShort(sock);
+    short mail_idx = getDataSize(sock);
     int i;
     Mail* currentMail = &mails[mail_idx];
     char mail_msg[BUF_SIZE];
@@ -202,7 +202,7 @@ void get_mail_operation(int sock, Account* account) {
 }
 
 void delete_mail_operation(int sock, Account* account) {
-    short mail_idx = recieveTwoBytesAndCastToShort(sock);
+    short mail_idx = getDataSize(sock);
     int i;
     if (i < account->inbox_size || account->inbox_mail_indices[i] == MAXMAILS) {
         sendToClientPrint(sock, "Invalid selection\n");

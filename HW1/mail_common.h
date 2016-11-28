@@ -11,8 +11,8 @@
 #include <unistd.h>
 #include <stdbool.h>
 
-#ifndef COMMUNICATION_NETWORKS_MAIL_COMMON_H
-#define COMMUNICATION_NETWORKS_MAIL_COMMON_H
+#ifndef MAIL_COMMON_H
+#define MAIL_COMMON_H
 
 #define DEFAULT_PORT "6423"
 #define DEFAULT_HOSTNAME = "localhost"
@@ -37,30 +37,33 @@
 #define LOG_KILL 'k'
 
 
-void sendall(int sock, char *buf, int *len);
+void sendall(int sockfd, void *buf, int *len);
 
-void sendall_imm(int sock, char *buf, int len);
+void sendall_imm(int sockfd, void *buf, int len);
 
-void recvall(int sock, char *buf, int *len);
+void recvall(int sockfd, void *buf, int *len);
 
-void recvall_imm(int sock, char *buf, int len);
+void recvall_imm(int sockfd, void *buf, int len);
 
-void send_char(int sock, char c);
+void send_char(int sockfd, char c);
 
-char recv_char(int sock);
+char recv_char(int sockfd);
 
-short recieveTwoBytesAndCastToShort(int sock);
+short getDataSize(int sockfd);
 
-void getData(int sock, char *buff);
+void getData(int sockfd, char *buf);
 
-void sendData(int sock, char *buff);
+void sendData(int sockfd, char *buf);
 
+//todo - move it to server? (matan)
 void sendToClientPrint(int sock, char *msg);
 
+//todo - move it to server? (matan)
 void sendHalt(int sock);
+
 
 void trySysCall(int syscallResult, const char *msg, int sockfd);
 
 void tryClose(int sockfd);
 
-#endif //COMMUNICATION_NETWORKS_MAIL_COMMON_H
+#endif //MAIL_COMMON_H
