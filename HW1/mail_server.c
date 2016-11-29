@@ -2,8 +2,8 @@
 
 
 typedef struct Account {
-    char username[MAX_USERNAME];
-    char password[MAX_PASSWORD];
+    char username[MAX_USERNAME+1];
+    char password[MAX_PASSWORD+1];
     unsigned short *inbox_mail_indices;
     unsigned short inbox_size;
 } Account;
@@ -12,14 +12,14 @@ typedef struct Mail {
     Account *sender;
     Account **recipients;
     unsigned int recipients_num;
-    char subject[MAX_SUBJECT];
-    char content[MAX_CONTENT];
+    char subject[MAX_SUBJECT+1];
+    char content[MAX_CONTENT+1];
 } Mail;
 
-Account accounts[NUM_OF_CLIENTS];
-Mail mails[MAXMAILS];
+Account* accounts[NUM_OF_CLIENTS];
+Mail* mails[MAXMAILS];
 
-unsigned int accounts_num; // value will be init'ed in read_file() ...
+unsigned int users_num; // value will be init'ed in read_file() ...
 unsigned int mails_num = 0;
 
 int isInt(char *str);
@@ -28,7 +28,7 @@ void shutdownSocket(int sock);
 
 void tryClose(int sock);
 
-void read_file(char *path);
+bool read_file(char *path);
 
 void parseMessage(int sock, unsigned char type, unsigned int nums);
 
@@ -47,6 +47,8 @@ void delete_mail_operation(int sock, Account* account);
 void sendToClientPrint(int sock, char *msg);
 
 void sendHalt(int sock);
+
+Account* loginToAccount(int sock);
 
 // function taken from  http://stackoverflow.com/questions/9210528/split-string-with-delimiters-in-c
 
@@ -98,15 +100,10 @@ char** str_split(char* a_str, const char a_delim)
     return result;
 }
 
-short twoBytesToShort(char arr[]) {
-    short* shortPtr = (short*)arr;
-    return *arr;
-}
-
 Account* getAccountByUsername(char* username) {
     int i;
-    for (i = 0; i < accounts_num; i++) {
-        if (strcmp(accounts[i]->username, username)) { return &accounts[i]; }
+    for (i = 0; i < users_num; i++) {
+        if (strcmp(accounts[i]->username, username)) { return accounts[i]; }
     }
     return NULL;
 }
@@ -117,11 +114,11 @@ void compose_operation(int sock, Account* account) {
     recvData(sock, subject);
     recvData(sock, targets);
     recvData(sock, content);
-    Mail* currentMail = &mails[mails_num];
-    currentMail->subject = subject;
-    currentMail->content = content;
+    Mail* currentMail = mails[mails_num];
+    strcpy(currentMail->subject, subject);
+    strcpy(currentMail->content, content);
     currentMail->recipients_num = 0;
-    tokens = str_split(targets, ',');
+    char** tokens = str_split(targets, ',');
     Account* tempAccount;
 
     // code taken from stack overflow
@@ -133,7 +130,7 @@ void compose_operation(int sock, Account* account) {
             tempAccount = getAccountByUsername(*(tokens + i));
             currentMail->recipients[currentMail->recipients_num] = tempAccount;
             currentMail->recipients_num++;
-            tempAccount->inbox_mail_indices = (unsigned short *)realloc((inbox_size + 1) * sizeof(unsigned short));
+            tempAccount->inbox_mail_indices = (unsigned short *)realloc(tempAccount->inbox_mail_indices, (tempAccount->inbox_size + 1) * sizeof(unsigned short));
             if (tempAccount->inbox_mail_indices == NULL) {
                 perror("Failed allocating memory");
                 exit(EXIT_FAILURE);
@@ -153,9 +150,10 @@ void compose_operation(int sock, Account* account) {
 void show_inbox_operation(int sock, Account* account) {
     int i;
     char mail_msg[BUF_SIZE];
-    for (i = 0; i < currentAccount->inbox_size; i++) {
+    for (i = 0; i < account->inbox_size; i++) {
         if (account->inbox_mail_indices[i] == MAXMAILS) { continue; } // mail idx MAXMAILS is marked as a deleted mail
         memset(mail_msg, 0, BUF_SIZE);
+        //TODO fix itoa issue
         itoa(i, mail_msg, 10);
         strcat(mail_msg, " ");
         strcat(mail_msg, mails[account->inbox_mail_indices[i]]->sender->username);
@@ -182,21 +180,21 @@ bool canRead(Mail* mail, Account* account) {
 void get_mail_operation(int sock, Account* account) {
     short mail_idx = getDataSize(sock);
     int i;
-    Mail* currentMail = &mails[mail_idx];
+    Mail* currentMail = mails[mail_idx];
     char mail_msg[BUF_SIZE];
-    if (canRead(mail, account)) {
+    if (canRead(currentMail, account)) {
         memset(mail_msg, 0, BUF_SIZE);
         strcat(mail_msg, "From: ");
-        strcat(mail_msg, mail->sender->username);
+        strcat(mail_msg, currentMail->sender->username);
         strcat(mail_msg, "\nTo: ");
-        for (i = 0; i < mail->recipients_num; i++) {
+        for (i = 0; i < currentMail->recipients_num; i++) {
             if (i > 0) { strcat(mail_msg, ","); }
-            strcat(mail_msg, mail->recipients[i]->username);
+            strcat(mail_msg, currentMail->recipients[i]->username);
         }
         strcat(mail_msg, "\nSubject: ");
-        strcat(mail_msg, mail->subject);
+        strcat(mail_msg, currentMail->subject);
         strcat(mail_msg, "\nText: ");
-        strcat(mail_msg, mail->content);
+        strcat(mail_msg, currentMail->content);
         strcat(mail_msg, "\n");
         sendToClientPrint(sock, mail_msg);
     }
@@ -207,13 +205,14 @@ void get_mail_operation(int sock, Account* account) {
 }
 
 void delete_mail_operation(int sock, Account* account) {
+    //TODO do something with mail_idx
     short mail_idx = getDataSize(sock);
     int i;
     if (i < account->inbox_size || account->inbox_mail_indices[i] == MAXMAILS) {
         sendToClientPrint(sock, "Invalid selection\n");
     }
     else {
-        account->inbox_mail_indices[i] == MAXMAILS;
+        account->inbox_mail_indices[i] = MAXMAILS;
     }
     sendHalt(sock);
 }
@@ -294,14 +293,13 @@ bool read_file(char *path) {
             users_num++;
     }
 
-    accounts = (account *) malloc(users_num * sizeof(account));
     if (accounts == NULL)
         return false;
 
     int i;
     // read each line and put into accounts
     for (i = 0; i < users_num; i++) {
-        fscanf(fp, "%s\t%s", accounts[i].username, accounts[i].password);
+        fscanf(fp, "%s\t%s", accounts[i]->username, accounts[i]->password);
     }
     return true;
 }
@@ -311,6 +309,7 @@ Account* loginToAccount(int sock) {
     const int AUTH_ATTEMPTS = MAX_LOGIN_ATTEMPTS;
     char username[MAX_USERNAME] = {0};
     char password[MAX_PASSWORD] = {0};
+    //TODO what to do with user_len and password_len
     char user_len;
     char password_len;
     while (true) {
@@ -318,9 +317,9 @@ Account* loginToAccount(int sock) {
         recvData(sock, username);
         recvData(sock, password);
         for (i = 0; i < users_num; i++) {
-            if ((strcmp(accounts[i].username, username) == 0) && (strcmp(accounts[i].password, password) == 0)) {
+            if ((strcmp(accounts[i]->username, username) == 0) && (strcmp(accounts[i]->password, password) == 0)) {
                 sendHalt(sock); // login successful, wait for input from user
-                return &accounts[i];
+                return accounts[i];
             }
         }
 
@@ -358,10 +357,6 @@ void serverLoop(int sock, Account* currentAccount) {
             default:;
         }
     }
-}
-
-int quit_operation(sock) {
-
 }
 
 int isInt(char *str) {
