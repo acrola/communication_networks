@@ -40,11 +40,11 @@
 #define LOG_KILL 'k'
 
 
-void sendall(int sockfd, void *buf, int *len);
+void sendall(int sockfd, char *buf, int *len);
 
 void sendall_imm(int sockfd, void *buf, int len);
 
-void recvall(int sockfd, void *buf, int *len);
+void recvall(int sockfd, char *buf, int *len);
 
 void recvall_imm(int sockfd, void *buf, int len);
 

@@ -1,6 +1,6 @@
 #include "mail_common.h"
 
-void sendall(int sockfd, void *buf, int *len)
+void sendall(int sockfd, char *buf, int *len)
 {
     /* sendall code as seen in recitation*/
     int total = 0; /* how many bytes we've sent */
@@ -29,7 +29,7 @@ void sendall_imm(int sockfd, void *buf, int len)
     sendall(sockfd, buf, &len);
 }
 
-void recvall(int sockfd, void *buf, int *len)
+void recvall(int sockfd, char *buf, int *len)
 {
     int total = 0; /* how many bytes we've read */
     int bytesleft = *len; /* how many we have left to read */
