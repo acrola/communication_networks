@@ -24,7 +24,7 @@
 #define MAX_CONTENT 2000
 #define NUM_OF_CLIENTS 20
 #define BUF_SIZE 4096
-#define ERROR_BUF_SIZE 100
+#define ERROR_MSG_SIZE 100
 #define MAX_LOGIN_ATTEMPTS 3
 
 #define OP_SHOWINBOX 's'

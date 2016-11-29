@@ -1,20 +1,24 @@
 #include "mail_common.h"
 
+/*
+ * LOCAL DEFINES DECLERATIONS
+ */
+// operations strings
 #define SHOW_INBOX_STR "SHOW_INBOX"
 #define GET_MAIL_STR "GET_MAIL"
 #define DELETE_MAIL_STR "DELETE_MAIL"
 #define COMPOSE_STR "COMPOSE"
 #define QUIT_STR "QUIT"
-
+// username and password fields
 #define USERNAME_FIELD_PREFIX "User:"
 #define USERNAME_FIELD_NAME "username"
 #define PASSWORD_FIELD_PREFIX "Password:"
 #define PASSWORD_FIELD_NAME "password"
 
 
-
-
-
+/*
+ * LOCAL FUNCTIONS DECLERATIONS
+ */
 char getOpCode(char *token);
 
 void analyzeProgramArguments(int argc, char *argv[], char **hostname, char **port);
@@ -30,18 +34,18 @@ void start_login_request(int sockfd);
 
 void printDataFromServer(int sockfd);
 
-void getInputFromUser(char *buf, size_t bufSize, const char *errorMsg, int sockfd);
+void getInputFromUser(char *buf, size_t bufSize, int sockfd);
 
 void validateComposeField(int iterationNumber, char *token, int sockfd);
 
-void log_kill_handler();
-
 void getOperationFromUser(int sockfd, bool *clientIsActive);
+
+void composeNewMail(int sockfd);
 
 
 int main(int argc, char *argv[])
 {
-    int sockfd;
+    int sockfd, exitCode = EXIT_SUCCESS;
     char *hostname, *port;
     bool clientIsActive;
 
@@ -66,26 +70,22 @@ int main(int argc, char *argv[])
             case LOG_REQUEST:
                 start_login_request(sockfd);
                 break;
-            case LOG_KILL:
-                log_kill_handler(); // todo - what is the difference between this and OP_QUIT...? server disconnected us anyway. consider union
-                clientIsActive = false;
+            case OP_HALT:
+                getOperationFromUser(sockfd, &clientIsActive); // maybe set clientIsActive to zero (QUIT operation)
                 break;
             case OP_PRINT:
                 printDataFromServer(sockfd);
                 break;
-            case OP_HALT:
-                getOperationFromUser(sockfd, &clientIsActive); // maybe set clientIsActive to zero
-                break;
-            case OP_QUIT:
-                quit_operation();
+            case LOG_KILL: // happens when user failed to login after MAX_LOGIN_ATTEMPTS
+                printf("Failed logging in to the server - failed %d times.\nExiting...\n", MAX_LOGIN_ATTEMPTS);
                 clientIsActive = false;
+                exitCode = EXIT_FAILURE;
                 break;
             default:;
-
         }
     }
     tryClose(sockfd);
-    return EXIT_SUCCESS;
+    return exitCode;
 }
 
 void establishInitialConnection(int sockfd, char *hostname, char *port)
@@ -133,9 +133,6 @@ void establishInitialConnection(int sockfd, char *hostname, char *port)
 }
 
 
-
-
-
 void analyzeProgramArguments(int argc, char **argv, char **hostname, char **port)
 {
     /*exit in case of incorrect argument count*/
@@ -165,65 +162,17 @@ void analyzeProgramArguments(int argc, char **argv, char **hostname, char **port
     }
 }
 
-
-
-/*void validateUser(int sockfd)
-{
-    int attemptsLeft = MAX_INPUT_ATTEMPTS;
-    char buf[BUF_SIZE], username[MAX_USERNAME], password[MAX_PASSWORD];
-    char serverAnswer;
-    do
-    {
-        //zero all buffers
-        memset(buf, 0, BUF_SIZE);
-        memset(username, 0, MAX_USERNAME);
-        memset(password, 0, MAX_PASSWORD);
-        serverAnswer = 0;
-
-        //get username and password from user
-        getLoginInputFromUser(username, "User:", "username", MAX_USERNAME, sockfd);
-        getLoginInputFromUser(password, "Password:", "password", MAX_PASSWORD, sockfd);
-
-        //copy the data to buf in the form of "<username>\t<password>" and send to the server for validation
-        strcpy(buf, username);
-        strcat(buf, "\t");
-        strcat(buf, password);
-        sendData(sockfd, buf);
-
-        // receive 1 byte answer from server
-        trySysCall(recv(sockfd, &serverAnswer, 1, 0), "Receiving connection answer from the server failed", sockfd);
-
-        if (serverAnswer) // connection succeeded
-        {
-            return;
-        }
-        attemptsLeft--;
-        printf("Connection to server failed. Attempts Left: %d\n", attemptsLeft);
-    } while (attemptsLeft > 0);
-    printf("No more attempts left. Exiting...");
-    tryClose(sockfd);
-    exit(EXIT_FAILURE);
-
-}*/
-
 void getLoginInputFromUser(char *fieldBuf, const char *fieldPrefix, const char *fieldName, int maxFieldLength,
                            int sockfd)
 {
-    char *token, buf[BUF_SIZE] = {0}, errBuf[ERROR_BUF_SIZE] = {0};
+    char *token, buf[BUF_SIZE], errorMsg[ERROR_MSG_SIZE] = {0};
 
-    sprintf(errBuf, "Error - reading %s failed\n", fieldName);
-    getInputFromUser(buf, BUF_SIZE, errBuf, sockfd);
-
+    sprintf(errorMsg, "Error - reading %s failed", fieldName);
     //try to read input from user to buf
-    if (!fgets(buf, BUF_SIZE, stdin))
-    {
-        printf("Error - reading %s failed\n", fieldName);
-        tryClose(sockfd);
-        exit(EXIT_FAILURE);
-    }
+    getInputFromUser(buf, BUF_SIZE, sockfd);
 
-    // parse input until first space or tab
-    token = strtok(buf, " \t\r");
+    // parse input until first space
+    token = strtok(buf, " ");
 
     if (strcmp(token, fieldPrefix))
     {
@@ -241,16 +190,6 @@ void getLoginInputFromUser(char *fieldBuf, const char *fieldPrefix, const char *
     }
     strcpy(fieldBuf, token);
 }
-
-
-
-void quit_operation()
-{
-
-}
-
-
-
 
 
 char getOpCode(char *token)
@@ -296,14 +235,14 @@ void printDataFromServer(int sockfd)
     printf("%s", buf);
 }
 
-void getInputFromUser(char *buf, size_t bufSize, const char *errorMsg, int sockfd)
+void getInputFromUser(char *buf, size_t bufSize, int sockfd)
 {
 
     //zero buffer
     memset(buf, 0, bufSize);
     if (!fgets(buf, bufSize, stdin))
     {
-        printf("%s. Exiting...\n",errorMsg);
+        printf("fgets error - failed to get input from user. Exiting...\n");
         tryClose(sockfd);
         exit(EXIT_FAILURE);
 
@@ -314,7 +253,7 @@ void getInputFromUser(char *buf, size_t bufSize, const char *errorMsg, int sockf
 void validateComposeField(int iterationNumber, char *token, int sockfd)
 {
     bool gotError = false;
-    char *field = "", errMsg[50] = {0};
+    char *field = "", errMsg[ERROR_MSG_SIZE] = {0};
     switch (iterationNumber)
     {
         case 0: //To
@@ -352,11 +291,6 @@ void validateComposeField(int iterationNumber, char *token, int sockfd)
 
 }
 
-void log_kill_handler()
-{
-    printf("Failed logging to server - failed %d times.\nexiting...\n", MAX_LOGIN_ATTEMPTS);
-}
-
 void getOperationFromUser(int sockfd, bool *clientIsActive)
 {
     char buf[BUF_SIZE];
@@ -364,15 +298,8 @@ void getOperationFromUser(int sockfd, bool *clientIsActive)
     short mailId;
     while(true) // iterate until a valid opcode is given;
     {
-        //zero buffer
-        memset(buf, 0, BUF_SIZE);
-        //get input from user
-        if (!fgets(buf, BUF_SIZE, stdin))
-        {
-            printf("Error getting operation from user\n");
-            tryClose(sockfd);
-            exit(EXIT_FAILURE);
-        }
+        getInputFromUser(buf, BUF_SIZE, sockfd);
+
         token = strtok(buf, " \t\r\n");
         opCode = getOpCode(token);
 
@@ -382,17 +309,14 @@ void getOperationFromUser(int sockfd, bool *clientIsActive)
             break;
         }
         printf("You entered an invalid operation. Please try again.\n");
-
     }
     // send the valid opcode to the server
-    trySysCall(send(sockfd, &opCode, sizeof(char), 0), "Sending opcode to server failed", 0);
-
+    trySysCall(send(sockfd, &opCode, sizeof(char), 0), "Sending opcode to server failed", sockfd);
 
     switch (opCode)
     {
         case OP_SHOWINBOX:
-            break; // client returns to listen to the server
-
+            break; // client returns listening to the server
         case OP_DELETEMAIL: // operations involving mail id
         case OP_GETMAIL:
             token = strtok(NULL, " \t\r\n");
@@ -402,28 +326,13 @@ void getOperationFromUser(int sockfd, bool *clientIsActive)
             sendall_imm(sockfd, &mailId, sizeof(mailId));
             break;
         case OP_COMPOSE:
-            //3 loops - To, Subject, Text
-            for (int i = 0; i < 3; ++i)
-            {
-                // get input (To / Subject / Text)
-                getInputFromUser(buf, BUF_SIZE, "Error getting input from user (compose operation)", sockfd);
-                token = strtok(buf, " \t\r");
-                validateComposeField(i, token,sockfd);
-                // the field is valid, hence we continue parsing until a new line is encountered
-                token = strtok(NULL, "\n");
-                //copy the data , null terminate it and send it to the server
-                strcpy(buf, token);
-                buf[strlen(token)] = 0;
-                sendData(sockfd, buf);
-            }
-
-            sendData(sockfd, buf);
-            printf("%s", buf);
+            composeNewMail(sockfd);
             break;
         case OP_QUIT:
-            //todo - do we really need to let the server know we're quitting? if not - change above..
-            *clientIsActive = false;
+            // let the server know we're quitting
             send_char(sockfd, OP_QUIT);
+            // change clientIsActive to false so we will not try to receive anything from the server but exit directrly
+            *clientIsActive = false;
             break;
         default:
             handleUnexpectedError("Invalid opcode", sockfd);
@@ -431,15 +340,24 @@ void getOperationFromUser(int sockfd, bool *clientIsActive)
 
 }
 
-
-void printErrorMsgAndExit(const char *errMsg, int sockfd)
+void composeNewMail(int sockfd)
 {
-    printf("%s.\nExiting...\n",errMsg);
-    tryClose(sockfd);
-    exit(EXIT_FAILURE);
-
+    char buf[BUF_SIZE];
+    char *token;
+    //3 loops - To, Subject, Text
+    for (int i = 0; i < 3; ++i)
+    {
+        // get input (To / Subject / Text)
+        getInputFromUser(buf, BUF_SIZE, sockfd);
+        token = strtok(buf, " \t\r");
+        validateComposeField(i, token, sockfd);
+        // the field is valid, hence we continue parsing until a new line is encountered
+        token = strtok(NULL, "\n");
+        //copy the data , null terminate it and send it to the server
+        strcpy(buf, token);
+        buf[strlen(token)] = 0;
+        sendData(sockfd, buf);
+    }
 }
-
-
 
 
