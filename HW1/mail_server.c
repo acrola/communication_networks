@@ -1,5 +1,6 @@
 #include "mail_common.h"
 
+
 typedef struct Account {
     char username[MAX_USERNAME];
     char password[MAX_PASSWORD];
@@ -42,6 +43,10 @@ void compose_operation(int sock, Account* account);
 void get_mail_operation(int sock, Account* account);
 
 void delete_mail_operation(int sock, Account* account);
+
+void sendToClientPrint(int sock, char *msg);
+
+void sendHalt(int sock);
 
 // function taken from  http://stackoverflow.com/questions/9210528/split-string-with-delimiters-in-c
 
@@ -108,10 +113,10 @@ Account* getAccountByUsername(char* username) {
 
 
 void compose_operation(int sock, Account* account) {
-    char subject[1024], targets[1024], content[1024];
-    getData(sock, subject);
-    getData(sock, targets);
-    getData(sock, content);
+    char subject[MAX_SUBJECT+1], targets[BUF_SIZE], content[MAX_CONTENT+1];
+    recvData(sock, subject);
+    recvData(sock, targets);
+    recvData(sock, content);
     Mail* currentMail = &mails[mails_num];
     currentMail->subject = subject;
     currentMail->content = content;
@@ -234,7 +239,7 @@ int main(int argc, char *argv[]) {
         }
         port = argv[2];
     } else {
-        port = "6423";
+        port = DEFAULT_PORT;
     }
 
     read_file(path);
@@ -246,7 +251,7 @@ int main(int argc, char *argv[]) {
     }
     /* IPv4 with given port. We dont care what address*/
     myaddr.sin_family = AF_INET;
-    myaddr.sin_port = htons((short) strtol(port, NULL, 10));
+    myaddr.sin_port = htons((uint16_t) strtol(port, NULL, 10));
     myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
     /* try to bind*/
     if (bind(sock, (struct sockaddr *) &(myaddr), sizeof(myaddr)) < 0) {
@@ -303,15 +308,15 @@ bool read_file(char *path) {
 
 Account* loginToAccount(int sock) {
     int i, auth_attempts = 0;
-    const int AUTH_ATTEMPTS = 3;
+    const int AUTH_ATTEMPTS = MAX_LOGIN_ATTEMPTS;
     char username[MAX_USERNAME] = {0};
     char password[MAX_PASSWORD] = {0};
     char user_len;
     char password_len;
     while (true) {
         send_char(sock, LOG_REQUEST);
-        getData(sock, username);
-        getData(sock, password);
+        recvData(sock, username);
+        recvData(sock, password);
         for (i = 0; i < users_num; i++) {
             if ((strcmp(accounts[i].username, username) == 0) && (strcmp(accounts[i].password, password) == 0)) {
                 sendHalt(sock); // login successful, wait for input from user
@@ -332,7 +337,7 @@ Account* loginToAccount(int sock) {
 
 void serverLoop(int sock, Account* currentAccount) {
     // when here, after sock establishment and user auth. keep listening for ops
-
+    //todo - matan - don't forget to validate mail id!!!
     while (true) {
         switch (recv_char(sock)) {
             case OP_SHOWINBOX:
@@ -350,6 +355,7 @@ void serverLoop(int sock, Account* currentAccount) {
             case OP_COMPOSE:
                 compose_operation(sock, currentAccount);
                 break;
+            default:;
         }
     }
 }
@@ -400,3 +406,13 @@ void shutdownSocket(int sock) {
 }
 
 
+void sendToClientPrint(int sock, char *msg)
+{
+    send_char(sock, OP_PRINT);
+    sendData(sock, msg);
+}
+
+void sendHalt(int sock)
+{
+    send_char(sock, OP_HALT);
+}

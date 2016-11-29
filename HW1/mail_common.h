@@ -24,6 +24,8 @@
 #define MAX_CONTENT 2000
 #define NUM_OF_CLIENTS 20
 #define BUF_SIZE 4096
+#define ERROR_BUF_SIZE 100
+#define MAX_LOGIN_ATTEMPTS 3
 
 #define OP_SHOWINBOX 's'
 #define OP_GETMAIL 'g'
@@ -52,19 +54,16 @@ char recv_char(int sockfd);
 
 short getDataSize(int sockfd);
 
-void getData(int sockfd, char *buf);
+void recvData(int sockfd, char *buf);
 
 void sendData(int sockfd, char *buf);
-
-//todo - move it to server? (matan)
-void sendToClientPrint(int sock, char *msg);
-
-//todo - move it to server? (matan)
-void sendHalt(int sock);
-
 
 void trySysCall(int syscallResult, const char *msg, int sockfd);
 
 void tryClose(int sockfd);
+
+void shutdownSocket(int sock);
+
+void handleUnexpectedError(const char *errorMsg, int sockfd);
 
 #endif //MAIL_COMMON_H

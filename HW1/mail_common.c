@@ -80,17 +80,18 @@ char recv_char(int sockfd)
 short getDataSize(int sockfd)
 {
     short dataSize;
-    recvall_imm(sockfd, &dataSize, 2);
+    recvall_imm(sockfd, &dataSize, sizeof(dataSize));
+    //set to host bytes order
     dataSize = ntohs((uint16_t) dataSize);
     return dataSize;
 }
 
 
-void getData(int sockfd, char *buf)
+void recvData(int sockfd, char *buf)
 {
     short dataSize = getDataSize(sockfd);
     recvall_imm(sockfd, buf, dataSize);
-    buf[dataSize] = '\0'; //null terminator to termiante the string
+    buf[dataSize] = '\0'; //null terminator to terminate the string
 }
 
 void sendData(int sockfd, char *buf)
@@ -99,20 +100,9 @@ void sendData(int sockfd, char *buf)
     //cast to network order
     short dataSize_networkOrder = htons((uint16_t) dataSize);
     // send data size
-    sendall_imm(sockfd, &dataSize_networkOrder, 2);
+    sendall_imm(sockfd, &dataSize_networkOrder, sizeof(dataSize_networkOrder));
     //send data
     sendall_imm(sockfd, buf, dataSize);
-}
-
-void sendToClientPrint(int sock, char *msg)
-{
-    send_char(sock, OP_PRINT);
-    sendData(sock, msg);
-}
-
-void sendHalt(int sock)
-{
-    send_char(sock, OP_HALT);
 }
 
 void trySysCall(int syscallResult, const char *msg, int sockfd)
@@ -136,4 +126,35 @@ void tryClose(int sockfd)
         perror("Could not close socket");
         exit(errno);
     }
+}
+
+void shutdownSocket(int sock)
+{
+    int res = 0;
+    char buff[10];
+    /* send shtdwn message, and stop writing*/
+    shutdown(sock, SHUT_WR);
+    while (1)
+    {
+        /* read until the end of the stream*/
+        res = recv(sock, buff, 10, 0);
+        if (res < 0)
+        {
+            perror("Shutdown error");
+            exit(errno);
+        }
+        if (res == 0)
+        {
+            break;
+        }
+    }
+    tryClose(sock);
+    exit(EXIT_SUCCESS);
+}
+
+void handleUnexpectedError(const char *errorMsg, int sockfd)
+{
+    printf("An unexpected error occurred: %s.\nExiting...", errorMsg);
+    tryClose(sockfd);
+    exit(EXIT_FAILURE);
 }
