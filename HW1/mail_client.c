@@ -366,7 +366,8 @@ void composeNewMail(int sockfd)
     char buf[BUF_SIZE];
     char *token;
     //3 loops - To, Subject, Text
-    for (int i = 0; i < 3; ++i)
+    int i;
+    for (i = 0; i < 3; ++i)
     {
         // get input (To / Subject / Text)
         getInputFromUser(buf, BUF_SIZE, sockfd);
