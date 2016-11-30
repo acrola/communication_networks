@@ -42,6 +42,7 @@ void getOperationFromUser(int sockfd, bool *clientIsActive);
 
 void composeNewMail(int sockfd);
 
+void validateMailId(long parsedMailId, int sockfd);
 
 int main(int argc, char *argv[])
 {
@@ -296,6 +297,7 @@ void getOperationFromUser(int sockfd, bool *clientIsActive)
     char buf[BUF_SIZE];
     char *token, opCode;
     short mailId;
+    long parsedMailId;
     while(true) // iterate until a valid opcode is given;
     {
         getInputFromUser(buf, BUF_SIZE, sockfd);
@@ -320,8 +322,10 @@ void getOperationFromUser(int sockfd, bool *clientIsActive)
         case OP_DELETEMAIL: // operations involving mail id
         case OP_GETMAIL:
             token = strtok(NULL, " \t\r\n");
+            parsedMailId = strtol(token, NULL, 10);
+            validateMailId(parsedMailId, sockfd);
             //cast mail id to short in network order
-            mailId = htons((uint16_t) strtol(token, NULL, 10));
+            mailId = htons((uint16_t)parsedMailId);
             // send mail id to server
             sendall_imm(sockfd, &mailId, sizeof(mailId));
             break;
@@ -360,4 +364,12 @@ void composeNewMail(int sockfd)
     }
 }
 
-
+void validateMailId(long parsedMailId, int sockfd)
+{
+    if (parsedMailId < 1)
+    {
+        printf("Error - Invalid mail ID.\nExiting...");
+        tryClose(sockfd);
+        exit(EXIT_FAILURE);
+    }
+}
