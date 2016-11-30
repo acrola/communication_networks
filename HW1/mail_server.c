@@ -186,7 +186,7 @@ Mail* account_mail_access(Account* account, short mail_idx) {
 
 
 void show_inbox_operation(int sock, Account* account) {
-    int i;
+    short i;
     char mail_msg[BUF_SIZE];
     Mail* currentMail;
     printf("account size %d \n", account->inbox_size);
@@ -195,19 +195,13 @@ void show_inbox_operation(int sock, Account* account) {
         currentMail = account_mail_access(account, i);
         printf("account pointer %p \n", (void *) currentMail);
         if (currentMail != NULL) {  // mail idx MAXMAILS is marked as a deleted mail
-            printf("hello mate\n");
             memset(mail_msg, 0, BUF_SIZE);
             sprintf(mail_msg, "%d", i);
             strcat(mail_msg, " ");
-            printf("hello mate2\n");
-
             strcat(mail_msg, currentMail->sender->username);
-            strcat(mail_msg, " ~");
+            strcat(mail_msg, " \"");
             strcat(mail_msg, currentMail->subject);
-            printf("hello mate3\n");
-
-            strcat(mail_msg, " ~");
-            strcat(mail_msg, "*\n");
+            strcat(mail_msg, "\"\n");
             sendToClientPrint(sock, mail_msg);
         }
     }
@@ -364,7 +358,6 @@ bool read_file(char *path) {
 
 Account* loginToAccount(int sock) {
     int i, auth_attempts = 0;
-    const int AUTH_ATTEMPTS = MAX_LOGIN_ATTEMPTS;
     char username[MAX_USERNAME] = {0};
     char password[MAX_PASSWORD] = {0};
     while (true) {
@@ -379,14 +372,13 @@ Account* loginToAccount(int sock) {
             }
         }
 
-        sendToClientPrint(sock, "LOGIN ATTEMPT FAILED\n");
-        send_char(sock, LOG_REQUEST);
-        auth_attempts += 1;
-        if (auth_attempts >= AUTH_ATTEMPTS) {
+        auth_attempts++;
+        if (auth_attempts >= MAX_LOGIN_ATTEMPTS) {
             sendToClientPrint(sock, "LOGIN FAILED - GOT KILL FROM SERVER\n");
             send_char(sock, LOG_KILL);
             return NULL;
         }
+        sendToClientPrint(sock, "LOGIN ATTEMPT FAILED\n");
     }
 }
 
