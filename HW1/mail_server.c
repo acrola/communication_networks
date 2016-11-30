@@ -392,7 +392,6 @@ Account* loginToAccount(int sock) {
 
 void serverLoop(int sock, Account* currentAccount) {
     // when here, after sock establishment and user auth. keep listening for ops
-    //todo - matan - don't forget to validate mail id!!!
     while (true) {
         switch (recv_char(sock)) {
             case OP_SHOWINBOX:
