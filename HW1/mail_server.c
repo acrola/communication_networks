@@ -122,6 +122,7 @@ void compose_operation(int sock, Account* account) {
 
     recvData(sock, currentMail->content);
     printf("content recieved: %s\n", currentMail->content);
+    currentMail->sender = account;
 
     printf("k\n");
 
