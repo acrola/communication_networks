@@ -10,6 +10,8 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <assert.h>
+
 
 #ifndef MAIL_COMMON_H
 #define MAIL_COMMON_H

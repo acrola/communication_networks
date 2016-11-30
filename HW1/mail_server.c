@@ -26,8 +26,6 @@ int isInt(char *str);
 
 void shutdownSocket(int sock);
 
-void tryClose(int sock);
-
 bool read_file(char *path);
 
 void parseMessage(int sock, unsigned char type, unsigned int nums);
@@ -153,8 +151,7 @@ void show_inbox_operation(int sock, Account* account) {
     for (i = 0; i < account->inbox_size; i++) {
         if (account->inbox_mail_indices[i] == MAXMAILS) { continue; } // mail idx MAXMAILS is marked as a deleted mail
         memset(mail_msg, 0, BUF_SIZE);
-        //TODO fix itoa issue
-        itoa(i, mail_msg, 10);
+        sprintf(mail_msg, "%d", i);
         strcat(mail_msg, " ");
         strcat(mail_msg, mails[account->inbox_mail_indices[i]]->sender->username);
         strcat(mail_msg, " ~");
@@ -205,14 +202,12 @@ void get_mail_operation(int sock, Account* account) {
 }
 
 void delete_mail_operation(int sock, Account* account) {
-    //TODO do something with mail_idx
     short mail_idx = getDataSize(sock);
-    int i;
-    if (i < account->inbox_size || account->inbox_mail_indices[i] == MAXMAILS) {
+    if (mail_idx < account->inbox_size || account->inbox_mail_indices[mail_idx] == MAXMAILS) {
         sendToClientPrint(sock, "Invalid selection\n");
     }
     else {
-        account->inbox_mail_indices[i] = MAXMAILS;
+        account->inbox_mail_indices[mail_idx] = MAXMAILS;
     }
     sendHalt(sock);
 }
@@ -309,9 +304,6 @@ Account* loginToAccount(int sock) {
     const int AUTH_ATTEMPTS = MAX_LOGIN_ATTEMPTS;
     char username[MAX_USERNAME] = {0};
     char password[MAX_PASSWORD] = {0};
-    //TODO what to do with user_len and password_len
-    char user_len;
-    char password_len;
     while (true) {
         send_char(sock, LOG_REQUEST);
         recvData(sock, username);
@@ -359,6 +351,10 @@ void serverLoop(int sock, Account* currentAccount) {
     }
 }
 
+void quit_operation(int sock) {
+
+}
+
 int isInt(char *str) {
     /* tests if a string is just numbers*/
     if (*str == 0)
@@ -373,32 +369,6 @@ int isInt(char *str) {
 
 
 
-void tryClose(int sock) {
-    if (close(sock) < 0) {
-        perror("Could not close socket");
-        exit(errno);
-    }
-}
-
-void shutdownSocket(int sock) {
-    int res = 0;
-    char buff[10];
-    /* send shtdwn message, and stop writing*/
-    shutdown(sock, SHUT_WR);
-    while (1) {
-        /* read until the end of the stream */
-        res = recv(sock, buff, 10, 0);
-        if (res < 0) {
-            perror("Shutdown error");
-            exit(errno);
-        }
-        if (res == 0)
-            break;
-    }
-
-    tryClose(sock);
-    exit(0);
-}
 
 
 void sendToClientPrint(int sock, char *msg)

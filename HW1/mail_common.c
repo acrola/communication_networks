@@ -105,16 +105,6 @@ void sendData(int sockfd, char *buf)
     sendall_imm(sockfd, buf, dataSize);
 }
 
-void trySysCall(int syscallResult, const char *msg, int sockfd)
-{
-    if (syscallResult < 0)
-    {
-        perror(msg);
-        tryClose(sockfd);
-        exit(errno);
-    }
-}
-
 void tryClose(int sockfd)
 {
     if (sockfd == -1) // invalid sockfd - occurs only if "socket" fails, and it is in prpose
@@ -124,6 +114,16 @@ void tryClose(int sockfd)
     if (close(sockfd) < 0)
     {
         perror("Could not close socket");
+        exit(errno);
+    }
+}
+
+void trySysCall(int syscallResult, const char *msg, int sockfd)
+{
+    if (syscallResult < 0)
+    {
+        perror(msg);
+        tryClose(sockfd);
         exit(errno);
     }
 }
