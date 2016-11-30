@@ -83,6 +83,7 @@ short getDataSize(int sockfd)
     recvall_imm(sockfd, &dataSize, sizeof(dataSize));
     //set to host bytes order
     dataSize = ntohs((uint16_t) dataSize);
+    printf("%d\n", dataSize);
     return dataSize;
 }
 
@@ -92,6 +93,8 @@ void recvData(int sockfd, char *buf)
     short dataSize = getDataSize(sockfd);
     recvall_imm(sockfd, buf, dataSize);
     buf[dataSize] = '\0'; //null terminator to terminate the string
+    //printf("%s\n", buf);
+
 }
 
 void sendData(int sockfd, char *buf)

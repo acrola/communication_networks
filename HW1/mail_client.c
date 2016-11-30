@@ -68,15 +68,22 @@ int main(int argc, char *argv[])
         switch (recv_char(sockfd))
         {
             case LOG_REQUEST:
+                printf("got log request\n");
                 start_login_request(sockfd);
                 break;
             case OP_HALT:
+                printf("got halt request\n");
+
                 getOperationFromUser(sockfd, &clientIsActive); // maybe set clientIsActive to zero (QUIT operation)
                 break;
             case OP_PRINT:
+                printf("got print request\n");
+
                 printDataFromServer(sockfd);
                 break;
             case LOG_KILL: // happens when user failed to login after MAX_LOGIN_ATTEMPTS
+                printf("got kill request\n");
+
                 printf("Failed logging in to the server - failed %d times.\nExiting...\n", MAX_LOGIN_ATTEMPTS);
                 clientIsActive = false;
                 exitCode = EXIT_FAILURE;
@@ -247,6 +254,9 @@ void getInputFromUser(char *buf, size_t bufSize, int sockfd)
         exit(EXIT_FAILURE);
 
     }
+    while(buf[strlen(buf) - 1] == '\r' || buf[strlen(buf) - 1] == '\n') {
+        buf[strlen(buf) - 1] = 0; // kill break lines
+    }
 
 }
 
@@ -340,6 +350,19 @@ void getOperationFromUser(int sockfd, bool *clientIsActive)
 
 }
 
+char* incStartIdx(char* buf, int i) {
+    switch (i) {
+        case 0: // To:
+            return buf + 4;
+        case 1: // Subject:
+            return buf + 9;
+        case 2: // Text:
+            return buf + 6;
+        default:
+            return NULL;
+}
+}
+
 void composeNewMail(int sockfd)
 {
     char buf[BUF_SIZE];
@@ -349,14 +372,18 @@ void composeNewMail(int sockfd)
     {
         // get input (To / Subject / Text)
         getInputFromUser(buf, BUF_SIZE, sockfd);
+        printf("temp %s\n", buf);
+        token = strtok(NULL, "\n");
         token = strtok(buf, " \t\r");
+        //printf("tempz %s\n", token);
         validateComposeField(i, token, sockfd);
         // the field is valid, hence we continue parsing until a new line is encountered
-        token = strtok(NULL, "\n");
+        //token = strtok(NULL, "\n");
         //copy the data , null terminate it and send it to the server
-        strcpy(buf, token);
-        buf[strlen(token)] = 0;
-        sendData(sockfd, buf);
+        //strcpy(buf, token);
+        //buf[strlen(token)] = 0;
+        sendData(sockfd, incStartIdx(buf, i));
+        printf("%s\n", buf);
     }
 }
 

@@ -1,5 +1,7 @@
 #include "mail_common.h"
 
+#define WELCOME_MSG "Welcome! I am simple-mail-server\n"
+
 
 typedef struct Account {
     char username[MAX_USERNAME+1];
@@ -101,23 +103,38 @@ char** str_split(char* a_str, const char a_delim)
 Account* getAccountByUsername(char* username) {
     int i;
     for (i = 0; i < users_num; i++) {
-        if (strcmp(accounts[i]->username, username)) { return accounts[i]; }
+        if (strcmp(accounts[i]->username, username) == 0) { return accounts[i]; }
     }
     return NULL;
 }
 
 
 void compose_operation(int sock, Account* account) {
-    char subject[MAX_SUBJECT+1], targets[BUF_SIZE], content[MAX_CONTENT+1];
-    recvData(sock, subject);
-    recvData(sock, targets);
-    recvData(sock, content);
-    Mail* currentMail = mails[mails_num];
-    strcpy(currentMail->subject, subject);
-    strcpy(currentMail->content, content);
-    currentMail->recipients_num = 0;
-    char** tokens = str_split(targets, ',');
+    Mail* currentMail = (Mail*)malloc(sizeof(Mail));
+    //char subject[MAX_SUBJECT+1], targets[TOTAL_TO * (MAX_USERNAME + 1)], content[MAX_CONTENT+1];
+    char targets[TOTAL_TO * (MAX_USERNAME + 1)];
     Account* tempAccount;
+
+    recvData(sock, targets);
+    printf("targets recieved: %s\n", targets);
+    recvData(sock, currentMail->subject);
+    printf("subject recieved: %s\n", currentMail->subject);
+
+    recvData(sock, currentMail->content);
+    printf("content recieved: %s\n", currentMail->content);
+
+    printf("k\n");
+
+    mails[mails_num] = currentMail;
+    printf("added mail %d at place %p\n", mails_num, (void*)currentMail);
+    printf("%s %s\n", currentMail->content, currentMail->subject);
+    //strcpy(currentMail->subject, subject);
+    //strcpy(currentMail->content, content);
+    currentMail->recipients_num = 0;
+    printf("c\n");
+
+    char** tokens = str_split(targets, ',');
+    printf("%s",targets);
 
     // code taken from stack overflow
     if (tokens)
@@ -125,61 +142,90 @@ void compose_operation(int sock, Account* account) {
         int i;
         for (i = 0; *(tokens + i); i++)
         {
+            printf("a %s a\n", *(tokens + i));
             tempAccount = getAccountByUsername(*(tokens + i));
+            currentMail->recipients = (Account**)realloc(currentMail->recipients, (size_t)((currentMail->recipients_num + 1) * sizeof(Account*)));
             currentMail->recipients[currentMail->recipients_num] = tempAccount;
             currentMail->recipients_num++;
-            tempAccount->inbox_mail_indices = (unsigned short *)realloc(tempAccount->inbox_mail_indices, (tempAccount->inbox_size + 1) * sizeof(unsigned short));
+            printf("b %p\n", (void*)tempAccount->inbox_mail_indices);
+
+            if (tempAccount->inbox_mail_indices == NULL) {
+                tempAccount->inbox_mail_indices = (unsigned short *)malloc((size_t)(sizeof(unsigned short)));
+            }
+            else {
+                tempAccount->inbox_mail_indices = (unsigned short *)realloc(tempAccount->inbox_mail_indices, (size_t)((tempAccount->inbox_size + 1) * sizeof(unsigned short)));
+            }
             if (tempAccount->inbox_mail_indices == NULL) {
                 perror("Failed allocating memory");
                 exit(EXIT_FAILURE);
             }
-            tempAccount->inbox_mail_indices[tempAccount->inbox_size] = mails_num;
+            printf("t\n");
+
+            tempAccount->inbox_mail_indices[tempAccount->inbox_size] = mails_num; // add mail idx to indices list
             tempAccount->inbox_size++;
+            printf("y\n");
+
             free(*(tokens + i));
         }
         free(tokens);
     }
-    mails_num++;
+
+    printf("z\n");
+
+    mails_num++; // increase number of total mails in system
     sendToClientPrint(sock, "Mail sent\n");
     sendHalt(sock);
+}
+
+
+Mail* account_mail_access(Account* account, short mail_idx) {
+    printf("hhello there\n");
+    return (mail_idx > account->inbox_size || account->inbox_mail_indices[mail_idx - 1] == MAXMAILS) ? NULL : mails[account->inbox_mail_indices[mail_idx - 1]];
 }
 
 
 void show_inbox_operation(int sock, Account* account) {
     int i;
     char mail_msg[BUF_SIZE];
-    for (i = 0; i < account->inbox_size; i++) {
-        if (account->inbox_mail_indices[i] == MAXMAILS) { continue; } // mail idx MAXMAILS is marked as a deleted mail
-        memset(mail_msg, 0, BUF_SIZE);
-        sprintf(mail_msg, "%d", i);
-        strcat(mail_msg, " ");
-        strcat(mail_msg, mails[account->inbox_mail_indices[i]]->sender->username);
-        strcat(mail_msg, " ~");
-        strcat(mail_msg, mails[account->inbox_mail_indices[i]]->subject);
-        strcat(mail_msg, " ~");
-        strcat(mail_msg, "*\n");
-        sendToClientPrint(sock, mail_msg);
+    Mail* currentMail;
+    printf("account size %d \n", account->inbox_size);
+    for (i = 1; i <= account->inbox_size; i++) {
+        printf("hello\n");
+        currentMail = account_mail_access(account, i);
+        printf("account pointer %p \n", (void *) currentMail);
+        if (currentMail != NULL) {  // mail idx MAXMAILS is marked as a deleted mail
+            printf("hello mate\n");
+            memset(mail_msg, 0, BUF_SIZE);
+            sprintf(mail_msg, "%d", i);
+            strcat(mail_msg, " ");
+            printf("hello mate2\n");
+
+            strcat(mail_msg, currentMail->sender->username);
+            strcat(mail_msg, " ~");
+            strcat(mail_msg, currentMail->subject);
+            printf("hello mate3\n");
+
+            strcat(mail_msg, " ~");
+            strcat(mail_msg, "*\n");
+            sendToClientPrint(sock, mail_msg);
+        }
     }
     sendHalt(sock);
 }
 
 
-bool canRead(Mail* mail, Account* account) {
-    int i;
-    for (i = 0; i < mail->recipients_num; i++) {
-        if (mail->recipients[i] == account) {
-            return true;
-        }
-    }
-    return false;
-}
-
 void get_mail_operation(int sock, Account* account) {
     short mail_idx = getDataSize(sock);
     int i;
-    Mail* currentMail = mails[mail_idx];
-    char mail_msg[BUF_SIZE];
-    if (canRead(currentMail, account)) {
+    Mail* currentMail = account_mail_access(account, mail_idx);
+
+    if (currentMail == NULL) {
+        sendToClientPrint(sock, "Invalid selection\n");
+    }
+
+else {
+        char mail_msg[BUF_SIZE];
+
         memset(mail_msg, 0, BUF_SIZE);
         strcat(mail_msg, "From: ");
         strcat(mail_msg, currentMail->sender->username);
@@ -195,19 +241,18 @@ void get_mail_operation(int sock, Account* account) {
         strcat(mail_msg, "\n");
         sendToClientPrint(sock, mail_msg);
     }
-    else {
-        sendToClientPrint(sock, "Failed to get mail\n");
-    }
     sendHalt(sock);
 }
 
 void delete_mail_operation(int sock, Account* account) {
     short mail_idx = getDataSize(sock);
-    if (mail_idx < account->inbox_size || account->inbox_mail_indices[mail_idx] == MAXMAILS) {
+    Mail* currentMail = account_mail_access(account, mail_idx);
+
+    if (currentMail == NULL) {
         sendToClientPrint(sock, "Invalid selection\n");
     }
     else {
-        account->inbox_mail_indices[mail_idx] = MAXMAILS;
+        account->inbox_mail_indices[mail_idx - 1] = MAXMAILS;
     }
     sendHalt(sock);
 }
@@ -261,11 +306,11 @@ int main(int argc, char *argv[]) {
     /* accept the connection*/
     /* by this point we have a connection. play the game*/
     /* we can close the listening socket and play with the active socket*/
-    tryClose(sock);
     /* send welcome message to the client*/
     //send_to_print(new_sock, "Welcome! I am simple-mail-server.\n");
     /* server's logic*/
-    while (true) {
+    bool keepAlive = true;
+    while (keepAlive) {
         if ((new_sock = accept(sock, (struct sockaddr *) &their_addr, &sin_size)) < 0) {
             perror("Could not accept connection");
             exit(errno);
@@ -274,27 +319,44 @@ int main(int argc, char *argv[]) {
         if ((currentAccount = loginToAccount(new_sock)) == NULL) { continue; }
         serverLoop(new_sock, currentAccount);
     }
-
+    tryClose(sock);
+    // todo free dynamic accounts and mails
 }
 
 bool read_file(char *path) {
     FILE *fp;
     users_num = 0;   // count how many lines are in the file
-    int current_character;
     fp = fopen(path, "r");
+/*
+ *     int current_character;
     while (!feof(fp)) {
         current_character = fgetc(fp);
         if (current_character == '\n')
             users_num++;
     }
+    rewind(fp);
 
     if (accounts == NULL)
         return false;
 
-    int i;
+*/
     // read each line and put into accounts
-    for (i = 0; i < users_num; i++) {
-        fscanf(fp, "%s\t%s", accounts[i]->username, accounts[i]->password);
+    while (!feof(fp)) {
+        Account* account_ptr = (Account*)malloc(sizeof(Account));
+        account_ptr->inbox_mail_indices = 0;
+        account_ptr->inbox_mail_indices = NULL;
+        accounts[users_num] = account_ptr;
+
+        if (fscanf(fp, "%s\t%s", account_ptr->username, account_ptr->password) < 0) {
+            free(account_ptr);
+            if (errno != 0) {
+                perror("Cannot add account");
+            }
+        }
+        else {
+            users_num++;
+        }
+        //printf("adding account ~%s~ with password ~%s~ \n", accounts[i]->username, accounts[i]->password);
     }
     return true;
 }
@@ -310,6 +372,7 @@ Account* loginToAccount(int sock) {
         recvData(sock, password);
         for (i = 0; i < users_num; i++) {
             if ((strcmp(accounts[i]->username, username) == 0) && (strcmp(accounts[i]->password, password) == 0)) {
+                sendToClientPrint(sock, WELCOME_MSG);
                 sendHalt(sock); // login successful, wait for input from user
                 return accounts[i];
             }
@@ -332,18 +395,31 @@ void serverLoop(int sock, Account* currentAccount) {
     while (true) {
         switch (recv_char(sock)) {
             case OP_SHOWINBOX:
+                printf("got show request\n");
+
                 show_inbox_operation(sock, currentAccount);
                 break;
             case OP_GETMAIL:
+                printf("got get request\n");
+
                 get_mail_operation(sock, currentAccount);
                 break;
             case OP_DELETEMAIL:
+
+                printf("got del request\n");
+
                 delete_mail_operation(sock, currentAccount);
                 break;
             case OP_QUIT:
+
+                printf("got quit request\n");
+
                 quit_operation(sock);
                 return;
             case OP_COMPOSE:
+
+                printf("got compose request\n");
+
                 compose_operation(sock, currentAccount);
                 break;
             default:;
