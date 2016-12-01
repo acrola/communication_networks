@@ -34,8 +34,6 @@ void serverLoop(int sock, Account *currentAccount);
 
 void show_inbox_operation(int sock, Account *account);
 
-void quit_operation(int sock);
-
 void compose_operation(int sock, Account *account);
 
 void get_mail_operation(int sock, Account *account);
@@ -428,8 +426,8 @@ void serverLoop(int sock, Account *currentAccount)
             case OP_DELETEMAIL:
                 delete_mail_operation(sock, currentAccount);
                 break;
-            case OP_QUIT:
-                quit_operation(sock);
+            case OP_QUIT: // client quitted - we can close the sock and rturn to accept a new client
+                tryClose(sock);
                 return;
             case OP_COMPOSE:
                 compose_operation(sock, currentAccount);
@@ -437,11 +435,6 @@ void serverLoop(int sock, Account *currentAccount)
             default:;
         }
     }
-}
-
-void quit_operation(int sock)
-{
-
 }
 
 int isInt(char *str)
