@@ -27,7 +27,7 @@ int establishInitialConnection(char *hostname, char *port);
 
 void sendData(int sockfd, char *buf);
 
-void getLoginInputFromUser(char *fieldBuf, const char *fieldPrefix, const char *fieldName, int maxFieldLength,
+bool getLoginInputFromUser(char *fieldBuf, const char *fieldPrefix, const char *fieldName, int maxFieldLength,
                            int sockfd);
 
 void start_login_request(int sockfd);
@@ -36,7 +36,7 @@ void printDataFromServer(int sockfd);
 
 void getInputFromUser(char *buf, size_t bufSize, int sockfd);
 
-void validateComposeField(int iterationNumber, char *token, int sockfd);
+int validateComposeField(int iterationNumber, char *token, int sockfd);
 
 void getOperationFromUser(int sockfd, bool *clientIsActive);
 
@@ -162,7 +162,7 @@ void analyzeProgramArguments(int argc, char **argv, char **hostname, char **port
     }
 }
 
-void getLoginInputFromUser(char *fieldBuf, const char *fieldPrefix, const char *fieldName, int maxFieldLength,
+bool getLoginInputFromUser(char *fieldBuf, const char *fieldPrefix, const char *fieldName, int maxFieldLength,
                            int sockfd)
 {
     char *token, buf[BUF_SIZE], errorMsg[ERROR_MSG_SIZE] = {0};
@@ -176,19 +176,18 @@ void getLoginInputFromUser(char *fieldBuf, const char *fieldPrefix, const char *
 
     if (strcmp(token, fieldPrefix))
     {
-        printf("Invalid input format - The format is: \'%s <%s>\'. Exiting...\n", fieldPrefix, fieldName);
-        tryClose(sockfd);
-        exit(EXIT_FAILURE);
+        printf("Invalid input format - The format is: \'%s <%s>\'. Please try again\n", fieldPrefix, fieldName);
+        return false;
     }
     // parse input again to get field name
     token = strtok(NULL, " \t\r\n");
     if (strlen(token) > maxFieldLength)
     {
-        printf("%s is too long (maximal length is %d). Exiting...\n", fieldName, maxFieldLength);
-        tryClose(sockfd);
-        exit(EXIT_FAILURE);
+        printf("%s is too long (maximal length is %d). Please try again\n", fieldName, maxFieldLength);
+        return false;
     }
     strcpy(fieldBuf, token);
+    return true;
 }
 
 
@@ -222,8 +221,8 @@ void start_login_request(int sockfd)
 {
     char username[MAX_USERNAME + 1] = {0}; // extra char for the null terminator
     char password[MAX_PASSWORD + 1] = {0}; // same here :)
-    getLoginInputFromUser(username, USERNAME_FIELD_PREFIX, USERNAME_FIELD_NAME, MAX_USERNAME, sockfd);
-    getLoginInputFromUser(password, PASSWORD_FIELD_PREFIX, PASSWORD_FIELD_NAME, MAX_PASSWORD, sockfd);
+    while (!getLoginInputFromUser(username, USERNAME_FIELD_PREFIX, USERNAME_FIELD_NAME, MAX_USERNAME, sockfd));
+    while (!getLoginInputFromUser(password, PASSWORD_FIELD_PREFIX, PASSWORD_FIELD_NAME, MAX_PASSWORD, sockfd));
     sendData(sockfd, username);
     sendData(sockfd, password);
 }
@@ -231,7 +230,10 @@ void start_login_request(int sockfd)
 void printDataFromServer(int sockfd)
 {
     char buf[BUF_SIZE] = {0};
-    recvData(sockfd, buf);
+    if (recvData(sockfd, buf) == 0)
+    {
+        handleUnexpectedError("server disconnected before client", sockfd);
+    }
     printf("%s", buf);
 }
 
@@ -253,7 +255,7 @@ void getInputFromUser(char *buf, size_t bufSize, int sockfd)
 
 }
 
-void validateComposeField(int iterationNumber, char *token, int sockfd)
+int validateComposeField(int iterationNumber, char *token, int sockfd)
 {
     bool gotError = false;
     char *field = "", errMsg[ERROR_MSG_SIZE] = {0};
@@ -287,10 +289,10 @@ void validateComposeField(int iterationNumber, char *token, int sockfd)
     }
     if(gotError)
     {
-        printf("Invalid field - suppose to start with \'%s \'", field);
-        tryClose(sockfd);
-        exit(EXIT_FAILURE);
+        printf("Invalid field - suppose to start with \'%s \'\n", field);
+        return -1;
     }
+    return 0;
 
 }
 
@@ -368,16 +370,16 @@ void composeNewMail(int sockfd)
     {
         // get input (To / Subject / Text)
         getInputFromUser(buf, BUF_SIZE, sockfd);
-        printf("temp %s\n", buf);
-        token = strtok(NULL, "\n");
+
         token = strtok(buf, " \t\r");
-        //printf("tempz %s\n", token);
-        validateComposeField(i, token, sockfd);
-        // the field is valid, hence we continue parsing until a new line is encountered
-        //token = strtok(NULL, "\n");
-        //copy the data , null terminate it and send it to the server
-        //strcpy(buf, token);
-        //buf[strlen(token)] = 0;
+
+        if (validateComposeField(i, token, sockfd) < 0)
+        {
+            printf("Please try again.\n");
+            i--; // so the current iteration will start over
+            continue;
+        }
+
         sendData(sockfd, incStartIdx(buf, i));
         printf("%s\n", buf);
     }

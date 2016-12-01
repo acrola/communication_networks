@@ -46,9 +46,9 @@ void sendall(int sockfd, char *buf, int *len);
 
 void sendall_imm(int sockfd, void *buf, int len);
 
-void recvall(int sockfd, char *buf, int *len);
+int recvall(int sockfd, char *buf, int *len);
 
-void recvall_imm(int sockfd, void *buf, int len);
+int recvall_imm(int sockfd, void *buf, int len);
 
 void send_char(int sockfd, char c);
 
@@ -56,7 +56,7 @@ char recv_char(int sockfd);
 
 short getDataSize(int sockfd);
 
-void recvData(int sockfd, char *buf);
+int recvData(int sockfd, char *buf);
 
 void sendData(int sockfd, char *buf);
 

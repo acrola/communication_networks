@@ -29,7 +29,7 @@ void sendall_imm(int sockfd, void *buf, int len)
     sendall(sockfd, buf, &len);
 }
 
-void recvall(int sockfd, char *buf, int *len)
+int recvall(int sockfd, char *buf, int *len)
 {
     int total = 0; /* how many bytes we've read */
     int bytesleft = *len; /* how many we have left to read */
@@ -37,31 +37,28 @@ void recvall(int sockfd, char *buf, int *len)
     while (total < *len)
     {
         n = recv(sockfd, buf + total, (size_t) bytesleft, 0);
-        if (n == -1)
+        if (n < 0)
         {
-            break;
+            perror("Failed receiving data");
+            tryClose(sockfd);
+            exit(errno);
         }
         if (n == 0) // means the sender has closed the connection
         {
             *len = 0;
-            n = -1;
             break;
         }
         total += n;
         bytesleft -= n;
     }
     *len = total; /* return number actually sent here */
-    if (n == -1)
-    {
-        perror("Failed receiving data");
-        exit(errno);
-    }
+    return n;
 }
 
 
-void recvall_imm(int sockfd, void *buf, int len)
+int recvall_imm(int sockfd, void *buf, int len)
 {
-    recvall(sockfd, buf, &len);
+    return recvall(sockfd, buf, &len);
 }
 
 void send_char(int sockfd, char c)
@@ -80,7 +77,10 @@ char recv_char(int sockfd)
 short getDataSize(int sockfd)
 {
     short dataSize;
-    recvall_imm(sockfd, &dataSize, sizeof(dataSize));
+    if (recvall_imm(sockfd, &dataSize, sizeof(dataSize)) == 0)
+    {
+        return 0;
+    }
     //set to host bytes order
     dataSize = ntohs((uint16_t) dataSize);
     printf("%d\n", dataSize);
@@ -88,12 +88,13 @@ short getDataSize(int sockfd)
 }
 
 
-void recvData(int sockfd, char *buf)
+int recvData(int sockfd, char *buf)
 {
     short dataSize = getDataSize(sockfd);
-    recvall_imm(sockfd, buf, dataSize);
+    int n = recvall_imm(sockfd, buf, dataSize);
     buf[dataSize] = '\0'; //null terminator to terminate the string
-    //printf("%s\n", buf);
+    // if both dataSize and n are positive it means that the other side is still connected
+    return (dataSize && n) ? 1 : 0;
 
 }
 
