@@ -41,7 +41,7 @@ void recvall(int sockfd, char *buf, int *len)
         {
             break;
         }
-        if (n == 0)
+        if (n == 0) // means the sender has closed the connection
         {
             *len = 0;
             n = -1;

@@ -23,7 +23,7 @@ char getOpCode(char *token);
 
 void analyzeProgramArguments(int argc, char *argv[], char **hostname, char **port);
 
-void establishInitialConnection(int sockfd, char *hostname, char *port);
+int establishInitialConnection(char *hostname, char *port);
 
 void sendData(int sockfd, char *buf);
 
@@ -53,12 +53,8 @@ int main(int argc, char *argv[])
     // analyze hostname and port no.
     analyzeProgramArguments(argc, argv, &hostname, &port);
 
-    // open TCP socket with IPv4
-    // (no opened socket yet - hence we pass a -1 as a sockfd in case of a syscall failure)
-    trySysCall((sockfd = socket(PF_INET, SOCK_STREAM, 0)), "Error in opening client's socket", -1);
-
-    // connect to server socket
-    establishInitialConnection(sockfd, hostname, port);
+    // setup a connection and connect to server socket
+    sockfd = establishInitialConnection(hostname, port);
 
     clientIsActive = true;
     // loop runs as long as the client wants to get data and no errors occur.
@@ -69,23 +65,16 @@ int main(int argc, char *argv[])
         switch (recv_char(sockfd))
         {
             case LOG_REQUEST:
-                printf("got log request\n");
                 start_login_request(sockfd);
                 break;
             case OP_HALT:
-                printf("got halt request\n");
-
                 getOperationFromUser(sockfd, &clientIsActive); // maybe set clientIsActive to zero (QUIT operation)
                 break;
             case OP_PRINT:
-                printf("got print request\n");
-
                 printDataFromServer(sockfd);
                 break;
             case LOG_KILL: // happens when user failed to login after MAX_LOGIN_ATTEMPTS
-                printf("got kill request\n");
-
-                printf("Failed logging in to the server - failed %d times.\nExiting...\n", MAX_LOGIN_ATTEMPTS);
+                printf("Failed logging in to the server (after %d attempts).\nExiting...\n", MAX_LOGIN_ATTEMPTS);
                 clientIsActive = false;
                 exitCode = EXIT_FAILURE;
                 break;
@@ -96,9 +85,11 @@ int main(int argc, char *argv[])
     return exitCode;
 }
 
-void establishInitialConnection(int sockfd, char *hostname, char *port)
+int establishInitialConnection(char *hostname, char *port)
 {
-    int rv;
+    // CREDIT: most of this code was taken (with some changes) from beej's communication network guide:
+    // http://beej.us/guide/bgnet/examples/client.c
+    int rv, sockfd;
     struct addrinfo hints, *servinfo, *p;
 
     /* zero hints struct*/
@@ -106,6 +97,10 @@ void establishInitialConnection(int sockfd, char *hostname, char *port)
     /* we want IPv4 address and TCP*/
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
+
+    // open TCP socket with IPv4
+    // (no opened socket yet - hence we pass a -1 as a sockfd in case of a syscall failure)
+    trySysCall((sockfd = socket(PF_INET, SOCK_STREAM, 0)), "Error in opening client's socket", -1);
 
     /* try get address info*/
     if ((rv = getaddrinfo(hostname, port, &hints, &servinfo)) != 0)
@@ -117,11 +112,6 @@ void establishInitialConnection(int sockfd, char *hostname, char *port)
     p = servinfo;
     while (p != NULL)
     {
-        /* put last address into sent pointer*/
-        //h = (struct sockaddr_in *) p->ai_addr;
-        //dest_addr.sin_addr = h->sin_addr;
-
-
         if (connect(sockfd, p->ai_addr, p->ai_addrlen) == 0)
         {
             break; //connection established
@@ -133,11 +123,13 @@ void establishInitialConnection(int sockfd, char *hostname, char *port)
     if (p == NULL) //We didn't find a host
     {
         tryClose(sockfd);
-        fprintf(stderr, "Could not connect to server");
+        printf( "Could not connect to server");
         exit(EXIT_FAILURE);
     }
     /*free the servinfo struct - we're done with it"*/
     freeaddrinfo(servinfo);
+    // return the socket fd so it can be used outside this function
+    return sockfd;
 }
 
 
