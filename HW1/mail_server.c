@@ -113,9 +113,9 @@ Account *getAccountByUsername(char *username)
 void compose_operation(int sock, Account *account)
 {
     Account *tempAccount;
+    char targets[TOTAL_TO * (MAX_USERNAME + 1)];
     char **tokens = str_split(targets, ',');
     Mail *currentMail = (Mail *) malloc(sizeof(Mail));
-    char targets[TOTAL_TO * (MAX_USERNAME + 1)];
 
     recvData(sock, targets);
     recvData(sock, currentMail->subject);
@@ -269,7 +269,7 @@ int main(int argc, char *argv[])
     int sock, new_sock;
     socklen_t sin_size;
     struct sockaddr_in myaddr, their_addr;
-    Account *currentAccount = NULL;
+    Account *currentAccount;
     mails_num = 0;
 
     if (argc > 3)
