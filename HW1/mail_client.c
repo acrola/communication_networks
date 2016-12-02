@@ -382,7 +382,7 @@ void composeNewMail(int sockfd)
         }
 
         sendData(sockfd, incStartIdx(buf, i));
-        printf("%s\n", buf);
+        //printf("%s\n", buf);
     }
 }
 

@@ -114,34 +114,44 @@ void compose_operation(int sock, Account *account)
 {
     Account *tempAccount;
     char targets[TOTAL_TO * (MAX_USERNAME + 1)];
-    char **tokens = str_split(targets, ',');
+    char **tokens;
     Mail *currentMail = (Mail *) malloc(sizeof(Mail));
+    bool allTargetsValid = true;
 
     recvData(sock, targets);
     recvData(sock, currentMail->subject);
     recvData(sock, currentMail->content);
     currentMail->sender = account;
     mails[mails_num] = currentMail;
-    printf("%s %s\n", currentMail->content, currentMail->subject);
+    //printf("%s %s\n", currentMail->content, currentMail->subject);
     currentMail->recipients_num = 0;
-    printf("c\n");
+    //printf("c\n");
 
-    printf("%s", targets);
+    //printf("%s", targets);
 
-    /* code taken from stack overflow */
+    /* code inspired by  http://stackoverflow.com/questions/9210528/split-string-with-delimiters-in-c */
+    // parsing the targets string - adding the mail to each target's inbox
+    tokens = str_split(targets, ',');
     if (tokens)
     {
         int i;
         for (i = 0; *(tokens + i); i++)
         {
-            printf("a %s a\n", *(tokens + i));
+            //printf("a %s a\n", *(tokens + i));
             tempAccount = getAccountByUsername(*(tokens + i));
+            free(*(tokens + i));
+
+            if (tempAccount == NULL) {
+                allTargetsValid = false;
+                continue;
+            }
+
             currentMail->recipients = (Account **) realloc(currentMail->recipients,
                                                            (size_t) ((currentMail->recipients_num + 1) *
                                                                      sizeof(Account *)));
             currentMail->recipients[currentMail->recipients_num] = tempAccount;
             currentMail->recipients_num++;
-            printf("b %p\n", (void *) tempAccount->inbox_mail_indices);
+            //printf("b %p\n", (void *) tempAccount->inbox_mail_indices);
 
             if (tempAccount->inbox_mail_indices == NULL)
             {
@@ -158,27 +168,38 @@ void compose_operation(int sock, Account *account)
                 perror("Failed allocating memory");
                 exit(EXIT_FAILURE);
             }
-            printf("t\n");
+            //printf("t\n");
 
             tempAccount->inbox_mail_indices[tempAccount->inbox_size] = mails_num; /* add mail idx to indices list */
             tempAccount->inbox_size++;
-            printf("y\n");
+            //printf("y\n");
 
-            free(*(tokens + i));
         }
         free(tokens);
     }
 
-    printf("z\n");
+    //printf("z\n");
 
     mails_num++; /* increase number of total mails in system */
-    sendToClientPrint(sock, "Mail sent\n");
+    if (currentMail->recipients_num == 0) {
+        sendToClientPrint(sock, "Mail was not sent - unknown recipients.\n");
+        // even though we say the mail was not sent we still save it on our system
+    }
+    else {
+        if (allTargetsValid) {
+            sendToClientPrint(sock, "Mail sent\n");
+        }
+        else {
+            sendToClientPrint(sock, "Mail sent (some recipients were unidentified)\n");
+        }
+    }
     sendHalt(sock);
 }
 
 
 Mail *account_mail_access(Account *account, short mail_idx)
 {
+    //printf("%d\n", mail_idx);
     return (mail_idx > account->inbox_size || account->inbox_mail_indices[mail_idx - 1] == MAXMAILS) ? NULL
                                                                                                      : mails[account->inbox_mail_indices[
                     mail_idx - 1]];
@@ -312,9 +333,6 @@ int main(int argc, char *argv[])
     /* accept the connection */
     /* by this point we have a connection. play the game */
     /* we can close the listening socket and play with the active socket */
-    /* send welcome message to the client */
-    /* send_to_print(new_sock, "Welcome! I am simple-mail-server.\n"); */
-    /* server's logic */
     while (true)
     {
         /* accept a new client (connection with it will be done via new_sock) */
@@ -377,6 +395,7 @@ Account *loginToAccount(int sock)
             if ((strcmp(accounts[i]->username, username) == 0) && (strcmp(accounts[i]->password, password) == 0))
             {
                 sendToClientPrint(sock, WELCOME_MSG);
+                //printf("logged in\n");
                 sendHalt(sock); /* login successful, wait for input from user */
                 return accounts[i];
             }
