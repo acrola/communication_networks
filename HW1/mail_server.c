@@ -23,7 +23,7 @@ typedef struct Mail
 Account *accounts[NUM_OF_CLIENTS];
 Mail *mails[MAXMAILS];
 
-unsigned int users_num; // value will be init'ed in read_file() ...
+unsigned int users_num; /* value will be init'ed in read_file() ... */
 unsigned int mails_num = 0;
 
 int isInt(char *str);
@@ -46,7 +46,7 @@ void sendHalt(int sock);
 
 Account *loginToAccount(int sock);
 
-// function taken from  http://stackoverflow.com/questions/9210528/split-string-with-delimiters-in-c
+/* function taken from  http://stackoverflow.com/questions/9210528/split-string-with-delimiters-in-c */
 
 char **str_split(char *a_str, const char a_delim)
 {
@@ -113,7 +113,6 @@ Account *getAccountByUsername(char *username)
 void compose_operation(int sock, Account *account)
 {
     Mail *currentMail = (Mail *) malloc(sizeof(Mail));
-    //char subject[MAX_SUBJECT+1], targets[TOTAL_TO * (MAX_USERNAME + 1)], content[MAX_CONTENT+1];
     char targets[TOTAL_TO * (MAX_USERNAME + 1)];
     Account *tempAccount;
 
@@ -123,15 +122,13 @@ void compose_operation(int sock, Account *account)
     currentMail->sender = account;
     mails[mails_num] = currentMail;
     printf("%s %s\n", currentMail->content, currentMail->subject);
-    //strcpy(currentMail->subject, subject);
-    //strcpy(currentMail->content, content);
     currentMail->recipients_num = 0;
     printf("c\n");
 
     char **tokens = str_split(targets, ',');
     printf("%s", targets);
 
-    // code taken from stack overflow
+    /* code taken from stack overflow */
     if (tokens)
     {
         int i;
@@ -163,7 +160,7 @@ void compose_operation(int sock, Account *account)
             }
             printf("t\n");
 
-            tempAccount->inbox_mail_indices[tempAccount->inbox_size] = mails_num; // add mail idx to indices list
+            tempAccount->inbox_mail_indices[tempAccount->inbox_size] = mails_num; /* add mail idx to indices list */
             tempAccount->inbox_size++;
             printf("y\n");
 
@@ -174,7 +171,7 @@ void compose_operation(int sock, Account *account)
 
     printf("z\n");
 
-    mails_num++; // increase number of total mails in system
+    mails_num++; /* increase number of total mails in system */
     sendToClientPrint(sock, "Mail sent\n");
     sendHalt(sock);
 }
@@ -197,7 +194,7 @@ void show_inbox_operation(int sock, Account *account)
     {
         currentMail = account_mail_access(account, i);
         if (currentMail != NULL)
-        {  // mail idx MAXMAILS is marked as a deleted mail
+        {  /* mail idx MAXMAILS is marked as a deleted mail */
             memset(mail_msg, 0, BUF_SIZE);
             sprintf(mail_msg, "%d", i);
             strcat(mail_msg, " ");
@@ -311,50 +308,36 @@ int main(int argc, char *argv[])
     trySysCall(listen(sock, 1), "Could not listen to socket", sock);
 
     sin_size = sizeof(struct sockaddr_in);
-    /* accept the connection*/
-    /* by this point we have a connection. play the game*/
-    /* we can close the listening socket and play with the active socket*/
-    /* send welcome message to the client*/
-    //send_to_print(new_sock, "Welcome! I am simple-mail-server.\n");
-    /* server's logic*/
+    /* accept the connection */
+    /* by this point we have a connection. play the game */
+    /* we can close the listening socket and play with the active socket */
+    /* send welcome message to the client */
+    /* send_to_print(new_sock, "Welcome! I am simple-mail-server.\n"); */
+    /* server's logic */
     while (true)
     {
-        // accept a new client (connection with it will be done via new_sock)
+        /* accept a new client (connection with it will be done via new_sock) */
         trySysCall((new_sock = accept(sock, (struct sockaddr *) &their_addr, &sin_size)), "Could not accept connection",
                    sock);
-        // reached here, has connection with client - validate username and password
+        /* reached here, has connection with client - validate username and password */
         if ((currentAccount = loginToAccount(new_sock)) == NULL)
         {
-            //close the socket we just opened and wait for a new client
+            /* close the socket we just opened and wait for a new client */
             tryClose(new_sock);
             continue;
         }
-        // validation is done - start taking orders from client
+        /* validation is done - start taking orders from client */
         serverLoop(new_sock, currentAccount);
     }
-    //tryClose(sock);
     // todo free dynamic accounts and mails
 }
 
 bool read_file(char *path)
 {
     FILE *fp;
-    users_num = 0;   // count how many lines are in the file
+    users_num = 0;   /* count how many lines are in the file */
     fp = fopen(path, "r");
-/*
- *     int current_character;
-    while (!feof(fp)) {
-        current_character = fgetc(fp);
-        if (current_character == '\n')
-            users_num++;
-    }
-    rewind(fp);
-
-    if (accounts == NULL)
-        return false;
-
-*/
-    // read each line and put into accounts
+    /* read each line and put into accounts */
     while (!feof(fp))
     {
         Account *account_ptr = (Account *) malloc(sizeof(Account));
@@ -374,7 +357,6 @@ bool read_file(char *path)
         {
             users_num++;
         }
-        //printf("adding account ~%s~ with password ~%s~ \n", accounts[i]->username, accounts[i]->password);
     }
     return true;
 }
@@ -394,7 +376,7 @@ Account *loginToAccount(int sock)
             if ((strcmp(accounts[i]->username, username) == 0) && (strcmp(accounts[i]->password, password) == 0))
             {
                 sendToClientPrint(sock, WELCOME_MSG);
-                sendHalt(sock); // login successful, wait for input from user
+                sendHalt(sock); /* login successful, wait for input from user */
                 return accounts[i];
             }
         }
@@ -412,7 +394,7 @@ Account *loginToAccount(int sock)
 
 void serverLoop(int sock, Account *currentAccount)
 {
-    // when here, after sock establishment and user auth. keep listening for ops
+    /* when here, after sock establishment and user auth. keep listening for ops */
     while (true)
     {
         switch (recv_char(sock))
@@ -426,7 +408,7 @@ void serverLoop(int sock, Account *currentAccount)
             case OP_DELETEMAIL:
                 delete_mail_operation(sock, currentAccount);
                 break;
-            case OP_QUIT: // client quitted - we can close the sock and rturn to accept a new client
+            case OP_QUIT: /* client quitted - we can close the sock and rturn to accept a new client */
                 tryClose(sock);
                 return;
             case OP_COMPOSE:

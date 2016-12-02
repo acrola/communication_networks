@@ -68,4 +68,4 @@ void shutdownSocket(int sock);
 
 void handleUnexpectedError(const char *errorMsg, int sockfd);
 
-#endif //MAIL_COMMON_H
+#endif /* MAIL_COMMON_H */

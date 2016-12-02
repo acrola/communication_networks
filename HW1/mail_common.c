@@ -2,7 +2,7 @@
 
 void sendall(int sockfd, char *buf, int *len)
 {
-    /* sendall code as seen in recitation*/
+    /* sendall code as seen in recitation */
     int total = 0; /* how many bytes we've sent */
     int bytesleft = *len; /* how many we have left to send */
     int n = 0;
@@ -43,7 +43,7 @@ int recvall(int sockfd, char *buf, int *len)
             tryClose(sockfd);
             exit(errno);
         }
-        if (n == 0) // means the sender has closed the connection
+        if (n == 0) /* means the sender has closed the connection */
         {
             *len = 0;
             break;
@@ -81,7 +81,7 @@ short getDataSize(int sockfd)
     {
         return 0;
     }
-    //set to host bytes order
+    /* set to host bytes order */
     dataSize = ntohs((uint16_t) dataSize);
     printf("%d\n", dataSize);
     return dataSize;
@@ -92,8 +92,8 @@ int recvData(int sockfd, char *buf)
 {
     short dataSize = getDataSize(sockfd);
     int n = recvall_imm(sockfd, buf, dataSize);
-    buf[dataSize] = '\0'; //null terminator to terminate the string
-    // if both dataSize and n are positive it means that the other side is still connected
+    buf[dataSize] = '\0'; /* null terminator to terminate the string */
+    /* if both dataSize and n are positive it means that the other side is still connected */
     return (dataSize && n) ? 1 : 0;
 
 }
@@ -101,17 +101,17 @@ int recvData(int sockfd, char *buf)
 void sendData(int sockfd, char *buf)
 {
     short dataSize = (short) strlen(buf);
-    //cast to network order
+    /* cast to network order */
     short dataSize_networkOrder = htons((uint16_t) dataSize);
-    // send data size
+    /* send data size */
     sendall_imm(sockfd, &dataSize_networkOrder, sizeof(dataSize_networkOrder));
-    //send data
+    /* send data */
     sendall_imm(sockfd, buf, dataSize);
 }
 
 void tryClose(int sockfd)
 {
-    if (sockfd == -1) // invalid sockfd - occurs only if "socket" fails, and it is in prpose
+    if (sockfd == -1) /* invalid sockfd - occurs only if "socket" fails, and it is in prpose */
     {
         return;
     }
@@ -136,11 +136,11 @@ void shutdownSocket(int sock)
 {
     int res = 0;
     char buff[10];
-    /* send shtdwn message, and stop writing*/
+    /* send shtdwn message, and stop writing */
     shutdown(sock, SHUT_WR);
     while (1)
     {
-        /* read until the end of the stream*/
+        /* read until the end of the stream */
         res = recv(sock, buff, 10, 0);
         if (res < 0)
         {

@@ -3,13 +3,13 @@
 /*
  * LOCAL DEFINES DECLERATIONS
  */
-// operations strings
+/* operations strings */
 #define SHOW_INBOX_STR "SHOW_INBOX"
 #define GET_MAIL_STR "GET_MAIL"
 #define DELETE_MAIL_STR "DELETE_MAIL"
 #define COMPOSE_STR "COMPOSE"
 #define QUIT_STR "QUIT"
-// username and password fields
+/* username and password fields */
 #define USERNAME_FIELD_PREFIX "User:"
 #define USERNAME_FIELD_NAME "username"
 #define PASSWORD_FIELD_PREFIX "Password:"
@@ -50,16 +50,16 @@ int main(int argc, char *argv[])
     char *hostname, *port;
     bool clientIsActive;
 
-    // analyze hostname and port no.
+    /* analyze hostname and port no. */
     analyzeProgramArguments(argc, argv, &hostname, &port);
 
-    // setup a connection and connect to server socket
+    /* setup a connection and connect to server socket */
     sockfd = establishInitialConnection(hostname, port);
 
     clientIsActive = true;
-    // loop runs as long as the client wants to get data and no errors occur.
-    // if the client quits or an error occurs - the clientIsActive is set to false,
-    // we get out of the loop and shutdown the client program gracefully
+    /* loop runs as long as the client wants to get data and no errors occur. */
+    /* if the client quits or an error occurs - the clientIsActive is set to false, */
+    /* we get out of the loop and shutdown the client program gracefully */
     while (clientIsActive)
     {
         switch (recv_char(sockfd))
@@ -68,12 +68,12 @@ int main(int argc, char *argv[])
                 start_login_request(sockfd);
                 break;
             case OP_HALT:
-                getOperationFromUser(sockfd, &clientIsActive); // maybe set clientIsActive to zero (QUIT operation)
+                getOperationFromUser(sockfd, &clientIsActive); /* maybe set clientIsActive to zero (QUIT operation) */
                 break;
             case OP_PRINT:
                 printDataFromServer(sockfd);
                 break;
-            case LOG_KILL: // happens when user failed to login after MAX_LOGIN_ATTEMPTS
+            case LOG_KILL: /* happens when user failed to login after MAX_LOGIN_ATTEMPTS */
                 printf("Failed logging in to the server (after %d attempts).\nExiting...\n", MAX_LOGIN_ATTEMPTS);
                 clientIsActive = false;
                 exitCode = EXIT_FAILURE;
@@ -87,22 +87,22 @@ int main(int argc, char *argv[])
 
 int establishInitialConnection(char *hostname, char *port)
 {
-    // CREDIT: most of this code was taken (with some changes) from beej's communication network guide:
-    // http://beej.us/guide/bgnet/examples/client.c
+    /* CREDIT: most of this code was taken (with some changes) from beej's communication network guide: */
+    /* http://beej.us/guide/bgnet/examples/client.c */
     int rv, sockfd;
     struct addrinfo hints, *servinfo, *p;
 
     /* zero hints struct*/
     memset(&hints, 0, sizeof(hints));
-    /* we want IPv4 address and TCP*/
+    /* we want IPv4 address and TCP */
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
 
-    // open TCP socket with IPv4
-    // (no opened socket yet - hence we pass a -1 as a sockfd in case of a syscall failure)
+    /* open TCP socket with IPv4 */
+    /* (no opened socket yet - hence we pass a -1 as a sockfd in case of a syscall failure) */
     trySysCall((sockfd = socket(PF_INET, SOCK_STREAM, 0)), "Error in opening client's socket", -1);
 
-    /* try get address info*/
+    /* try get address info */
     if ((rv = getaddrinfo(hostname, port, &hints, &servinfo)) != 0)
     {
         fprintf(stderr, "Error getting address info: %s\n", gai_strerror(rv));
@@ -114,34 +114,34 @@ int establishInitialConnection(char *hostname, char *port)
     {
         if (connect(sockfd, p->ai_addr, p->ai_addrlen) == 0)
         {
-            break; //connection established
+            break; /* connection established */
         }
 
         p = p->ai_next;
     }
 
-    if (p == NULL) //We didn't find a host
+    if (p == NULL) /* We didn't find a host */
     {
         tryClose(sockfd);
         printf( "Could not connect to server");
         exit(EXIT_FAILURE);
     }
-    /*free the servinfo struct - we're done with it"*/
+    /*free the servinfo struct - we're done with it" */
     freeaddrinfo(servinfo);
-    // return the socket fd so it can be used outside this function
+    /* return the socket fd so it can be used outside this function */
     return sockfd;
 }
 
 
 void analyzeProgramArguments(int argc, char **argv, char **hostname, char **port)
 {
-    /*exit in case of incorrect argument count*/
+    /* exit in case of incorrect argument count */
     if (argc > 3)
     {
         printf("Incorrect Argument Count");
         exit(EXIT_FAILURE);
     }
-    /* place default hostname if required*/
+    /* place default hostname if required */
     if (argc == 1)
     {
         *hostname = DEFAULT_HOSTNAME;
@@ -151,7 +151,7 @@ void analyzeProgramArguments(int argc, char **argv, char **hostname, char **port
         *hostname = argv[1];
     }
 
-    /* place default port if required*/
+    /* place default port if required */
     if (argc < 3)
     {
         *port = DEFAULT_PORT;
@@ -168,10 +168,10 @@ bool getLoginInputFromUser(char *fieldBuf, const char *fieldPrefix, const char *
     char *token, buf[BUF_SIZE], errorMsg[ERROR_MSG_SIZE] = {0};
 
     sprintf(errorMsg, "Error - reading %s failed", fieldName);
-    //try to read input from user to buf
+    /* try to read input from user to buf */
     getInputFromUser(buf, BUF_SIZE, sockfd);
 
-    // parse input until first space
+    /* parse input until first space */
     token = strtok(buf, " ");
 
     if (strcmp(token, fieldPrefix))
@@ -179,7 +179,7 @@ bool getLoginInputFromUser(char *fieldBuf, const char *fieldPrefix, const char *
         printf("Invalid input format - The format is: \'%s <%s>\'. Please try again\n", fieldPrefix, fieldName);
         return false;
     }
-    // parse input again to get field name
+    /* parse input again to get field name */
     token = strtok(NULL, " \t\r\n");
     if (strlen(token) > maxFieldLength)
     {
@@ -213,14 +213,14 @@ char getOpCode(char *token)
     {
         return OP_QUIT;
     }
-    // bad operation - return error
+    /* bad operation - return error */
     return OP_ERROR;
 }
 
 void start_login_request(int sockfd)
 {
-    char username[MAX_USERNAME + 1] = {0}; // extra char for the null terminator
-    char password[MAX_PASSWORD + 1] = {0}; // same here :)
+    char username[MAX_USERNAME + 1] = {0}; /* extra char for the null terminator */
+    char password[MAX_PASSWORD + 1] = {0}; /* same here :) */
     while (!getLoginInputFromUser(username, USERNAME_FIELD_PREFIX, USERNAME_FIELD_NAME, MAX_USERNAME, sockfd));
     while (!getLoginInputFromUser(password, PASSWORD_FIELD_PREFIX, PASSWORD_FIELD_NAME, MAX_PASSWORD, sockfd));
     sendData(sockfd, username);
@@ -240,7 +240,7 @@ void printDataFromServer(int sockfd)
 void getInputFromUser(char *buf, size_t bufSize, int sockfd)
 {
 
-    //zero buffer
+    /* zero buffer */
     memset(buf, 0, bufSize);
     if (!fgets(buf, bufSize, stdin))
     {
@@ -250,7 +250,7 @@ void getInputFromUser(char *buf, size_t bufSize, int sockfd)
 
     }
     while(buf[strlen(buf) - 1] == '\r' || buf[strlen(buf) - 1] == '\n') {
-        buf[strlen(buf) - 1] = 0; // kill break lines
+        buf[strlen(buf) - 1] = 0; /* kill break lines */
     }
 
 }
@@ -261,7 +261,7 @@ int validateComposeField(int iterationNumber, char *token, int sockfd)
     char *field = "", errMsg[ERROR_MSG_SIZE] = {0};
     switch (iterationNumber)
     {
-        case 0: //To
+        case 0: /* To */
             if (strcmp(token, "To:"))
             {
                 gotError = true;
@@ -269,14 +269,14 @@ int validateComposeField(int iterationNumber, char *token, int sockfd)
             }
             break;
 
-        case 1: // Subject
+        case 1: /* Subject */
             if (strcmp(token, "Subject:"))
             {
                 gotError = true;
                 field = "Subject:";
             }
             break;
-        case 2: // Text
+        case 2: /* Text */
             if (strcmp(token, "Text:"))
             {
                 gotError = true;
@@ -302,44 +302,44 @@ void getOperationFromUser(int sockfd, bool *clientIsActive)
     char *token, opCode;
     short mailId;
     long parsedMailId;
-    while(true) // iterate until a valid opcode is given;
+    while(true) /* iterate until a valid opcode is given */
     {
         getInputFromUser(buf, BUF_SIZE, sockfd);
 
         token = strtok(buf, " \t\r\n");
         opCode = getOpCode(token);
 
-        // if opcode is valid - break out of the loop
+        /* if opcode is valid - break out of the loop */
         if (opCode != OP_ERROR)
         {
             break;
         }
         printf("You entered an invalid operation. Please try again.\n");
     }
-    // send the valid opcode to the server
+    /* send the valid opcode to the server */
     trySysCall(send(sockfd, &opCode, sizeof(char), 0), "Sending opcode to server failed", sockfd);
 
     switch (opCode)
     {
         case OP_SHOWINBOX:
-            break; // client returns listening to the server
-        case OP_DELETEMAIL: // operations involving mail id
+            break; /* client returns listening to the server */
+        case OP_DELETEMAIL: /* operations involving mail id */
         case OP_GETMAIL:
             token = strtok(NULL, " \t\r\n");
             parsedMailId = strtol(token, NULL, 10);
             validateMailId(parsedMailId, sockfd);
-            //cast mail id to short in network order
+            /* cast mail id to short in network order */
             mailId = htons((uint16_t)parsedMailId);
-            // send mail id to server
+            /* send mail id to server */
             sendall_imm(sockfd, &mailId, sizeof(mailId));
             break;
         case OP_COMPOSE:
             composeNewMail(sockfd);
             break;
         case OP_QUIT:
-            // let the server know we're quitting
+            /* let the server know we're quitting */
             send_char(sockfd, OP_QUIT);
-            // change clientIsActive to false so we will not try to receive anything from the server but exit directrly
+            /* change clientIsActive to false so we will not try to receive anything from the server but exit directrly */
             *clientIsActive = false;
             break;
         default:
@@ -350,11 +350,11 @@ void getOperationFromUser(int sockfd, bool *clientIsActive)
 
 char* incStartIdx(char* buf, int i) {
     switch (i) {
-        case 0: // To:
+        case 0: /* To: */
             return buf + 4;
-        case 1: // Subject:
+        case 1: /* Subject: */
             return buf + 9;
-        case 2: // Text:
+        case 2: /* Text: */
             return buf + 6;
         default:
             return NULL;
@@ -365,11 +365,11 @@ void composeNewMail(int sockfd)
 {
     char buf[BUF_SIZE];
     char *token;
-    //3 loops - To, Subject, Text
+    /* 3 loops - To, Subject, Text */
     int i;
     for (i = 0; i < 3; ++i)
     {
-        // get input (To / Subject / Text)
+        /* get input (To / Subject / Text) */
         getInputFromUser(buf, BUF_SIZE, sockfd);
 
         token = strtok(buf, " \t\r");
@@ -377,7 +377,7 @@ void composeNewMail(int sockfd)
         if (validateComposeField(i, token, sockfd) < 0)
         {
             printf("Please try again.\n");
-            i--; // so the current iteration will start over
+            i--; /* so the current iteration will start over */
             continue;
         }
 
