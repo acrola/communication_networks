@@ -112,9 +112,10 @@ Account *getAccountByUsername(char *username)
 
 void compose_operation(int sock, Account *account)
 {
+    Account *tempAccount;
+    char **tokens = str_split(targets, ',');
     Mail *currentMail = (Mail *) malloc(sizeof(Mail));
     char targets[TOTAL_TO * (MAX_USERNAME + 1)];
-    Account *tempAccount;
 
     recvData(sock, targets);
     recvData(sock, currentMail->subject);
@@ -125,7 +126,6 @@ void compose_operation(int sock, Account *account)
     currentMail->recipients_num = 0;
     printf("c\n");
 
-    char **tokens = str_split(targets, ',');
     printf("%s", targets);
 
     /* code taken from stack overflow */
@@ -264,12 +264,12 @@ void delete_mail_operation(int sock, Account *account)
 
 int main(int argc, char *argv[])
 {
-    mails_num = 0;
     char *port;
     char *path;
     int sock, new_sock;
     socklen_t sin_size;
     struct sockaddr_in myaddr, their_addr;
+    mails_num = 0;
     Account *currentAccount = NULL;
     if (argc > 3)
     {
@@ -329,7 +329,7 @@ int main(int argc, char *argv[])
         /* validation is done - start taking orders from client */
         serverLoop(new_sock, currentAccount);
     }
-    // todo free dynamic accounts and mails
+    /* todo free dynamic accounts and mails */
 }
 
 bool read_file(char *path)
