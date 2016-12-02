@@ -269,8 +269,9 @@ int main(int argc, char *argv[])
     int sock, new_sock;
     socklen_t sin_size;
     struct sockaddr_in myaddr, their_addr;
-    mails_num = 0;
     Account *currentAccount = NULL;
+    mails_num = 0;
+
     if (argc > 3)
     {
         printf("Incorrect Argument Count");
