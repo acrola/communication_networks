@@ -83,7 +83,6 @@ short getDataSize(int sockfd)
     }
     /* set to host bytes order */
     dataSize = ntohs((uint16_t) dataSize);
-    //printf("%d\n", dataSize);
     return dataSize;
 }
 

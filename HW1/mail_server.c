@@ -123,21 +123,17 @@ void compose_operation(int sock, Account *account)
     recvData(sock, currentMail->content);
     currentMail->sender = account;
     mails[mails_num] = currentMail;
-    //printf("%s %s\n", currentMail->content, currentMail->subject);
     currentMail->recipients_num = 0;
-    //printf("c\n");
 
-    //printf("%s", targets);
 
     /* code inspired by  http://stackoverflow.com/questions/9210528/split-string-with-delimiters-in-c */
-    // parsing the targets string - adding the mail to each target's inbox
+    /* parsing the targets string - adding the mail to each target's inbox*/
     tokens = str_split(targets, ',');
     if (tokens)
     {
         int i;
         for (i = 0; *(tokens + i); i++)
         {
-            //printf("a %s a\n", *(tokens + i));
             tempAccount = getAccountByUsername(*(tokens + i));
             free(*(tokens + i));
 
@@ -151,7 +147,6 @@ void compose_operation(int sock, Account *account)
                                                                      sizeof(Account *)));
             currentMail->recipients[currentMail->recipients_num] = tempAccount;
             currentMail->recipients_num++;
-            //printf("b %p\n", (void *) tempAccount->inbox_mail_indices);
 
             if (tempAccount->inbox_mail_indices == NULL)
             {
@@ -168,22 +163,17 @@ void compose_operation(int sock, Account *account)
                 perror("Failed allocating memory");
                 exit(EXIT_FAILURE);
             }
-            //printf("t\n");
-
             tempAccount->inbox_mail_indices[tempAccount->inbox_size] = mails_num; /* add mail idx to indices list */
             tempAccount->inbox_size++;
-            //printf("y\n");
 
         }
         free(tokens);
     }
 
-    //printf("z\n");
-
     mails_num++; /* increase number of total mails in system */
     if (currentMail->recipients_num == 0) {
         sendToClientPrint(sock, "Mail was not sent - unknown recipients.\n");
-        // even though we say the mail was not sent we still save it on our system
+        /*even though we say the mail was not sent we still save it on our system*/
     }
     else {
         if (allTargetsValid) {
@@ -199,7 +189,6 @@ void compose_operation(int sock, Account *account)
 
 Mail *account_mail_access(Account *account, short mail_idx)
 {
-    //printf("%d\n", mail_idx);
     return (mail_idx > account->inbox_size || account->inbox_mail_indices[mail_idx - 1] == MAXMAILS) ? NULL
                                                                                                      : mails[account->inbox_mail_indices[
                     mail_idx - 1]];
@@ -395,7 +384,6 @@ Account *loginToAccount(int sock)
             if ((strcmp(accounts[i]->username, username) == 0) && (strcmp(accounts[i]->password, password) == 0))
             {
                 sendToClientPrint(sock, WELCOME_MSG);
-                //printf("logged in\n");
                 sendHalt(sock); /* login successful, wait for input from user */
                 return accounts[i];
             }
