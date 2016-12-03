@@ -380,9 +380,7 @@ void composeNewMail(int sockfd)
             i--; /* so the current iteration will start over */
             continue;
         }
-
         sendData(sockfd, incStartIdx(buf, i));
-        //printf("%s\n", buf);
     }
 }
 
