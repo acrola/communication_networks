@@ -1,0 +1,6 @@
+User: Moshe
+Password: 1234
+SHOW_INBOX
+GET_MAIL 1
+DELETE_MAIL 1
+QUIT

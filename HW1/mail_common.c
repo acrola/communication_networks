@@ -134,8 +134,8 @@ void trySysCall(int syscallResult, const char *msg, int sockfd)
 void shutdownSocket(int sock)
 {
     int res = 0;
-    char buff[10];
-    /* send shtdwn message, and stop writing */
+    char buff[BUF_SIZE];
+    /* send shutdwn message, and stop writing */
     shutdown(sock, SHUT_WR);
     while (1)
     {

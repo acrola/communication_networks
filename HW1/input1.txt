@@ -1,0 +1,12 @@
+User: Yossi
+Password: password123
+COMPOSE
+To: Moshe
+Subject: Hi there!
+Text: I have just installed the new mail client!
+COMPOSE
+To: Moshe,Esther
+Subject: Funny pictures
+Text: How are you? Long time no see!
+SHOW_INBOX
+QUIT
