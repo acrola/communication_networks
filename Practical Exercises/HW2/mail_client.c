@@ -9,11 +9,14 @@
 #define DELETE_MAIL_STR "DELETE_MAIL"
 #define COMPOSE_STR "COMPOSE"
 #define QUIT_STR "QUIT"
-/* username and password fields */
+#define SHOW_ONLINE_USERS_STR "SHOW_ONLINE_USERS"
+
+/* username and password and chat fields */
 #define USERNAME_FIELD_PREFIX "User:"
 #define USERNAME_FIELD_NAME "username"
 #define PASSWORD_FIELD_PREFIX "Password:"
 #define PASSWORD_FIELD_NAME "password"
+#define CHAT_MSG_PREFIX "MSG"
 
 
 /*
@@ -197,6 +200,10 @@ char getOpCode(char *token)
     {
         return OP_SHOWINBOX;
     }
+    else if (!strcmp(token, SHOW_ONLINE_USERS_STR))
+    {
+        return OP_SHOW_ONLINE_USERS;
+    }
     else if (!strcmp(token, GET_MAIL_STR))
     {
         return OP_GETMAIL;
@@ -322,6 +329,7 @@ void getOperationFromUser(int sockfd, bool *clientIsActive)
     switch (opCode)
     {
         case OP_SHOWINBOX:
+        case OP_SHOW_ONLINE_USERS:
             break; /* client returns listening to the server */
         case OP_DELETEMAIL: /* operations involving mail id */
         case OP_GETMAIL:

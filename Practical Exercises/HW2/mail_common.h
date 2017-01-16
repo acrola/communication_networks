@@ -30,6 +30,7 @@
 #define MAX_LOGIN_ATTEMPTS 3
 
 #define OP_SHOWINBOX 's'
+#define OP_SHOW_ONLINE_USERS 'u'
 #define OP_GETMAIL 'g'
 #define OP_DELETEMAIL 'd'
 #define OP_COMPOSE 'c'
