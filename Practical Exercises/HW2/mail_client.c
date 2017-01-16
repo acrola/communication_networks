@@ -48,6 +48,8 @@ void composeNewMail(int sockfd);
 
 void validateMailId(long parsedMailId, int sockfd);
 
+void sendChatMessage(int sockfd, char *buf);
+
 int main(int argc, char *argv[])
 {
     int sockfd, exitCode = EXIT_SUCCESS;
@@ -337,8 +339,8 @@ void getOperationFromUser(int sockfd, bool *clientIsActive)
         case OP_SHOW_ONLINE_USERS:
             break; /* client returns listening to the server */
         case OP_CHAT_MSG:
-            printf("got chat message!\n");
-            break;//TODO - noam
+            sendChatMessage(sockfd, buf + strlen(CHAT_MSG_STR) + 1);
+            break;
         case OP_DELETEMAIL: /* operations involving mail id */
         case OP_GETMAIL:
             token = strtok(NULL, " \t\r\n");
@@ -362,6 +364,20 @@ void getOperationFromUser(int sockfd, bool *clientIsActive)
             handleUnexpectedError("Invalid opcode", sockfd);
     }
 
+}
+
+void sendChatMessage(int sockfd, char *buf)
+{
+    char target[(MAX_USERNAME + 1)] = {0};
+    char msg[BUF_SIZE] = {0};
+    char *token;
+    /*tokenize the target and the message and send to the server*/
+    token = strtok(buf, ":");
+    strcpy(target, token);
+    token = strtok(NULL, "\n") + 1; /*+1 for to remove the space from the beginning*/
+    strcpy(msg, token);
+    sendData(sockfd, target);
+    sendData(sockfd, msg);
 }
 
 char* incStartIdx(char* buf, int i) {
