@@ -10,13 +10,14 @@
 #define COMPOSE_STR "COMPOSE"
 #define QUIT_STR "QUIT"
 #define SHOW_ONLINE_USERS_STR "SHOW_ONLINE_USERS"
+#define CHAT_MSG_STR "MSG"
 
 /* username and password and chat fields */
 #define USERNAME_FIELD_PREFIX "User:"
 #define USERNAME_FIELD_NAME "username"
 #define PASSWORD_FIELD_PREFIX "Password:"
 #define PASSWORD_FIELD_NAME "password"
-#define CHAT_MSG_PREFIX "MSG"
+
 
 
 /*
@@ -204,6 +205,10 @@ char getOpCode(char *token)
     {
         return OP_SHOW_ONLINE_USERS;
     }
+    else if (!strcmp(token, CHAT_MSG_STR))
+    {
+        return OP_CHAT_MSG;
+    }
     else if (!strcmp(token, GET_MAIL_STR))
     {
         return OP_GETMAIL;
@@ -331,6 +336,9 @@ void getOperationFromUser(int sockfd, bool *clientIsActive)
         case OP_SHOWINBOX:
         case OP_SHOW_ONLINE_USERS:
             break; /* client returns listening to the server */
+        case OP_CHAT_MSG:
+            printf("got chat message!\n");
+            break;//TODO - noam
         case OP_DELETEMAIL: /* operations involving mail id */
         case OP_GETMAIL:
             token = strtok(NULL, " \t\r\n");
