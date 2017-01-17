@@ -1,6 +1,7 @@
 #include "mail_common.h"
 
 #define WELCOME_MSG "Welcome! I am simple-mail-server\n"
+#define CONNECTED_MSG "Connected to server\n"
 
 
 typedef struct Account
@@ -327,6 +328,8 @@ int main(int argc, char *argv[])
         /* accept a new client (connection with it will be done via new_sock) */
         trySysCall((new_sock = accept(sock, (struct sockaddr *) &their_addr, &sin_size)), "Could not accept connection",
                    sock);
+        /*the connection with the user is established - send a welcome message*/
+        sendToClientPrint(new_sock, WELCOME_MSG);
         /* reached here, has connection with client - validate username and password */
         if ((currentAccount = loginToAccount(new_sock)) == NULL)
         {
@@ -383,7 +386,7 @@ Account *loginToAccount(int sock)
         {
             if ((strcmp(accounts[i]->username, username) == 0) && (strcmp(accounts[i]->password, password) == 0))
             {
-                sendToClientPrint(sock, WELCOME_MSG);
+                sendToClientPrint(sock, CONNECTED_MSG);
                 sendHalt(sock); /* login successful, wait for input from user */
                 return accounts[i];
             }
