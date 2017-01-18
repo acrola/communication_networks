@@ -26,7 +26,7 @@ Account *accounts[NUM_OF_CLIENTS];
 Mail *mails[MAXMAILS];
 
 unsigned int users_num; /* value will be init'ed in read_file() ... */
-unsigned int mails_num = 0;
+unsigned short mails_num = 0;
 
 int isInt(char *str);
 
@@ -106,67 +106,18 @@ int main(int argc, char *argv[])
         /*the connection with the user is established - send a welcome message*/
         sendToClientPrint(new_sock, WELCOME_MSG);
         /* reached here, has connection with client - validate username and password */
-        if ((currentAccount = loginToAccount(new_sock)) == NULL)
+        if ((currentAccount = loginToAccount(new_sock)) != NULL)
         {
-            /* close the socket we just opened and wait for a new client */
-            tryClose(new_sock);
-            continue;
+            /* validation is done - start taking orders from client */
+            serverLoop(new_sock, currentAccount);
         }
-        /* validation is done - start taking orders from client */
-        serverLoop(new_sock, currentAccount);
+        /* close the accepted socket and wait for a new client */
+        tryClose(new_sock);
+
     }
     /* todo free dynamic accounts and mails */
 }
 
-/* function taken from  http://stackoverflow.com/questions/9210528/split-string-with-delimiters-in-c */
-
-char **str_split(char *a_str, const char a_delim)
-{
-    char **result = 0;
-    size_t count = 0;
-    char *tmp = a_str;
-    char *last_comma = 0;
-    char delim[2];
-    delim[0] = a_delim;
-    delim[1] = 0;
-
-    /* Count how many elements will be extracted. */
-    while (*tmp)
-    {
-        if (a_delim == *tmp)
-        {
-            count++;
-            last_comma = tmp;
-        }
-        tmp++;
-    }
-
-    /* Add space for trailing token. */
-    count += last_comma < (a_str + strlen(a_str) - 1);
-
-    /* Add space for terminating null string so caller
-       knows where the list of returned strings ends. */
-    count++;
-
-    result = malloc(sizeof(char *) * count);
-
-    if (result)
-    {
-        size_t idx = 0;
-        char *token = strtok(a_str, delim);
-
-        while (token)
-        {
-            assert(idx < count);
-            *(result + idx++) = strdup(token);
-            token = strtok(0, delim);
-        }
-        assert(idx == count - 1);
-        *(result + idx) = 0;
-    }
-
-    return result;
-}
 
 Account *getAccountByUsername(char *username)
 {
@@ -186,9 +137,15 @@ void compose_operation(int sock, Account *account)
 {
     Account *tempAccount;
     char targets[TOTAL_TO * (MAX_USERNAME + 1)];
-    char **tokens;
-    Mail *currentMail = (Mail *) malloc(sizeof(Mail));
+    char *recipient;
     bool allTargetsValid = true;
+    Mail *currentMail = (Mail *) malloc(sizeof(Mail));
+    if (currentMail == NULL)
+    {
+        printf("Failed allocating memory for new mail struct in compose_operation.\nExiting...\n");
+        tryClose(sock);
+        exit(EXIT_FAILURE);
+    }
 
     recvData(sock, targets);
     recvData(sock, currentMail->subject);
@@ -197,19 +154,20 @@ void compose_operation(int sock, Account *account)
     mails[mails_num] = currentMail;
     currentMail->recipients_num = 0;
 
-
-    /* code inspired by  http://stackoverflow.com/questions/9210528/split-string-with-delimiters-in-c */
-    /* parsing the targets string - adding the mail to each target's inbox*/
-    tokens = str_split(targets, ',');
-    if (tokens)
+    recipient = strtok(targets, ",");
+    if (recipient != NULL)
     {
-        int i;
-        for (i = 0; *(tokens + i); i++)
+        do
         {
-            tempAccount = getAccountByUsername(*(tokens + i));
-            free(*(tokens + i));
+            /*kill blank spaces*/
+            while (*recipient == ' ')
+            {
+                recipient++;
+            }
+            tempAccount = getAccountByUsername(recipient);
 
-            if (tempAccount == NULL) {
+            if (tempAccount == NULL)
+            {
                 allTargetsValid = false;
                 continue;
             }
@@ -232,14 +190,14 @@ void compose_operation(int sock, Account *account)
             }
             if (tempAccount->inbox_mail_indices == NULL)
             {
-                perror("Failed allocating memory");
+                printf("Failed allocating memory for inbox mail indices in compose_operation.\nExiting...\n");
+                tryClose(sock);
                 exit(EXIT_FAILURE);
             }
             tempAccount->inbox_mail_indices[tempAccount->inbox_size] = mails_num; /* add mail idx to indices list */
             tempAccount->inbox_size++;
 
-        }
-        free(tokens);
+        } while ((recipient = strtok(NULL, ",")));
     }
 
     mails_num++; /* increase number of total mails in system */
@@ -247,11 +205,14 @@ void compose_operation(int sock, Account *account)
         sendToClientPrint(sock, "Mail was not sent - unknown recipients.\n");
         /*even though we say the mail was not sent we still save it on our system*/
     }
-    else {
-        if (allTargetsValid) {
+    else
+    {
+        if (allTargetsValid)
+        {
             sendToClientPrint(sock, "Mail sent\n");
         }
-        else {
+        else
+        {
             sendToClientPrint(sock, "Mail sent (some recipients were unidentified)\n");
         }
     }
@@ -347,6 +308,7 @@ void delete_mail_operation(int sock, Account *account)
 bool read_file(char *path)
 {
     FILE *fp;
+    Account *account_ptr;
     users_num = 0;   /* count how many lines are in the file */
     /*first we'll check if the file exists*/
     if (access(path, F_OK) < 0)
@@ -358,21 +320,27 @@ bool read_file(char *path)
     /* read each line and put into accounts */
     while (!feof(fp))
     {
-        Account *account_ptr = (Account *) malloc(sizeof(Account));
-        account_ptr->inbox_mail_indices = 0;
+        account_ptr = (Account *) malloc(sizeof(Account));
+        if (!account_ptr)
+        {
+            printf("Allocation of new account failed in read_file.\nExiting...\n");
+            exit(EXIT_FAILURE);
+        }
         account_ptr->inbox_mail_indices = NULL;
-        accounts[users_num] = account_ptr;
-
+        account_ptr->online = false;
+        account_ptr->inbox_size = 0;
         if (fscanf(fp, "%s\t%s", account_ptr->username, account_ptr->password) < 0)
         {
             free(account_ptr);
             if (errno != 0)
             {
-                perror("Cannot add account");
+                perror("Cannot load account");
+                exit(EXIT_FAILURE);
             }
         }
         else
         {
+            accounts[users_num] = account_ptr;
             users_num++;
         }
     }
@@ -393,6 +361,7 @@ Account *loginToAccount(int sock)
         {
             if ((strcmp(accounts[i]->username, username) == 0) && (strcmp(accounts[i]->password, password) == 0))
             {
+                accounts[i]->online = true;
                 sendToClientPrint(sock, CONNECTED_MSG);
                 sendHalt(sock); /* login successful, wait for input from user */
                 return accounts[i];
@@ -426,8 +395,8 @@ void serverLoop(int sock, Account *currentAccount)
             case OP_DELETEMAIL:
                 delete_mail_operation(sock, currentAccount);
                 break;
-            case OP_QUIT: /* client quitted - we can close the sock and rturn to accept a new client */
-                tryClose(sock);
+            case OP_QUIT: /* client quitted - we update that it's offline and return*/
+                currentAccount->online = false;
                 return;
             case OP_COMPOSE:
                 compose_operation(sock, currentAccount);

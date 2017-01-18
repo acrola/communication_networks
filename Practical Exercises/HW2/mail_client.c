@@ -34,7 +34,7 @@ void sendData(int sockfd, char *buf);
 bool getLoginInputFromUser(char *fieldBuf, const char *fieldPrefix, const char *fieldName, int maxFieldLength,
                            int sockfd);
 
-void start_login_request(int sockfd);
+void startLoginRequest(int sockfd);
 
 void printDataFromServer(int sockfd);
 
@@ -71,7 +71,7 @@ int main(int argc, char *argv[])
         switch (recv_char(sockfd))
         {
             case LOG_REQUEST:
-                start_login_request(sockfd);
+                startLoginRequest(sockfd);
                 break;
             case OP_HALT:
                 getOperationFromUser(sockfd, &clientIsActive); /* maybe set clientIsActive to zero (QUIT operation) */
@@ -231,7 +231,7 @@ char getOpCode(char *token)
     return OP_ERROR;
 }
 
-void start_login_request(int sockfd)
+void startLoginRequest(int sockfd)
 {
     char username[MAX_USERNAME + 1] = {0}; /* extra char for the null terminator */
     char password[MAX_PASSWORD + 1] = {0}; /* same here :) */
