@@ -10,6 +10,7 @@ typedef struct Account
     char password[MAX_PASSWORD + 1];
     unsigned short *inbox_mail_indices;
     unsigned short inbox_size;
+    bool online;
 } Account;
 
 typedef struct Mail
@@ -46,6 +47,76 @@ void sendToClientPrint(int sock, char *msg);
 void sendHalt(int sock);
 
 Account *loginToAccount(int sock);
+
+int main(int argc, char *argv[])
+{
+    char *port;
+    char *path;
+    int sock, new_sock;
+    socklen_t sin_size;
+    struct sockaddr_in myaddr, their_addr;
+    Account *currentAccount;
+    mails_num = 0;
+
+    if (argc > 3)
+    {
+        printf("Incorrect Argument Count");
+        exit(EXIT_FAILURE);
+    }
+
+    path = argv[1];
+
+    if (argc == 3)
+    {
+        if (!isInt(argv[2]))
+        {
+            printf("Please enter a valid number as the port number");
+            exit(EXIT_FAILURE);
+        }
+        port = argv[2];
+    }
+    else
+    {
+        port = DEFAULT_PORT;
+    }
+
+    read_file(path);
+
+    /* open IPv4 TCP socket*/
+    trySysCall((sock = socket(PF_INET, SOCK_STREAM, 0)), "Could not open socket", -1);
+
+    /* IPv4 with given port. We dont care what address*/
+    myaddr.sin_family = AF_INET;
+    myaddr.sin_port = htons((uint16_t) strtol(port, NULL, 10));
+    myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    /* try to bind*/
+    trySysCall(bind(sock, (struct sockaddr *) &(myaddr), sizeof(myaddr)), "Could not bind socket", sock);
+    /* try to listen to the ether*/
+    trySysCall(listen(sock, 1), "Could not listen to socket", sock);
+
+    sin_size = sizeof(struct sockaddr_in);
+    /* accept the connection */
+    /* by this point we have a connection. play the game */
+    /* we can close the listening socket and play with the active socket */
+    while (true)
+    {
+        /* accept a new client (connection with it will be done via new_sock) */
+        trySysCall((new_sock = accept(sock, (struct sockaddr *) &their_addr, &sin_size)), "Could not accept connection",
+                   sock);
+        /*the connection with the user is established - send a welcome message*/
+        sendToClientPrint(new_sock, WELCOME_MSG);
+        /* reached here, has connection with client - validate username and password */
+        if ((currentAccount = loginToAccount(new_sock)) == NULL)
+        {
+            /* close the socket we just opened and wait for a new client */
+            tryClose(new_sock);
+            continue;
+        }
+        /* validation is done - start taking orders from client */
+        serverLoop(new_sock, currentAccount);
+    }
+    /* todo free dynamic accounts and mails */
+}
 
 /* function taken from  http://stackoverflow.com/questions/9210528/split-string-with-delimiters-in-c */
 
@@ -273,80 +344,16 @@ void delete_mail_operation(int sock, Account *account)
     sendHalt(sock);
 }
 
-int main(int argc, char *argv[])
-{
-    char *port;
-    char *path;
-    int sock, new_sock;
-    socklen_t sin_size;
-    struct sockaddr_in myaddr, their_addr;
-    Account *currentAccount;
-    mails_num = 0;
-
-    if (argc > 3)
-    {
-        printf("Incorrect Argument Count");
-        exit(EXIT_FAILURE);
-    }
-
-    path = argv[1];
-
-    if (argc == 3)
-    {
-        if (!isInt(argv[2]))
-        {
-            printf("Please enter a valid number as the port number");
-            exit(EXIT_FAILURE);
-        }
-        port = argv[2];
-    }
-    else
-    {
-        port = DEFAULT_PORT;
-    }
-
-    read_file(path);
-
-    /* open IPv4 TCP socket*/
-    trySysCall((sock = socket(PF_INET, SOCK_STREAM, 0)), "Could not open socket", -1);
-
-    /* IPv4 with given port. We dont care what address*/
-    myaddr.sin_family = AF_INET;
-    myaddr.sin_port = htons((uint16_t) strtol(port, NULL, 10));
-    myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    /* try to bind*/
-    trySysCall(bind(sock, (struct sockaddr *) &(myaddr), sizeof(myaddr)), "Could not bind socket", sock);
-    /* try to listen to the ether*/
-    trySysCall(listen(sock, 1), "Could not listen to socket", sock);
-
-    sin_size = sizeof(struct sockaddr_in);
-    /* accept the connection */
-    /* by this point we have a connection. play the game */
-    /* we can close the listening socket and play with the active socket */
-    while (true)
-    {
-        /* accept a new client (connection with it will be done via new_sock) */
-        trySysCall((new_sock = accept(sock, (struct sockaddr *) &their_addr, &sin_size)), "Could not accept connection",
-                   sock);
-        /*the connection with the user is established - send a welcome message*/
-        sendToClientPrint(new_sock, WELCOME_MSG);
-        /* reached here, has connection with client - validate username and password */
-        if ((currentAccount = loginToAccount(new_sock)) == NULL)
-        {
-            /* close the socket we just opened and wait for a new client */
-            tryClose(new_sock);
-            continue;
-        }
-        /* validation is done - start taking orders from client */
-        serverLoop(new_sock, currentAccount);
-    }
-    /* todo free dynamic accounts and mails */
-}
-
 bool read_file(char *path)
 {
     FILE *fp;
     users_num = 0;   /* count how many lines are in the file */
+    /*first we'll check if the file exists*/
+    if (access(path, F_OK) < 0)
+    {
+        perror("Failed to access the users file");
+        exit(EXIT_FAILURE);
+    }
     fp = fopen(path, "r");
     /* read each line and put into accounts */
     while (!feof(fp))
