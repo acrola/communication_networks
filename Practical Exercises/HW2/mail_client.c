@@ -19,7 +19,6 @@
 #define PASSWORD_FIELD_NAME "password"
 
 
-
 /*
  * LOCAL FUNCTIONS DECLERATIONS
  */
@@ -80,7 +79,7 @@ int main(int argc, char *argv[])
                 printDataFromServer(sockfd);
                 break;
             case LOG_KILL: /* happens when user failed to login after MAX_LOGIN_ATTEMPTS */
-                printf("Failed logging in to the server (after %d attempts).\nExiting...\n", MAX_LOGIN_ATTEMPTS);
+                printf("Login failed - got KILL from the server.\nExiting...\n");
                 clientIsActive = false;
                 exitCode = EXIT_FAILURE;
                 break;
@@ -129,7 +128,7 @@ int establishInitialConnection(char *hostname, char *port)
     if (p == NULL) /* We didn't find a host */
     {
         tryClose(sockfd);
-        printf( "Could not connect to server");
+        printf("Could not connect to server\n");
         exit(EXIT_FAILURE);
     }
     /*free the servinfo struct - we're done with it" */
@@ -144,7 +143,7 @@ void analyzeProgramArguments(int argc, char **argv, char **hostname, char **port
     /* exit in case of incorrect argument count */
     if (argc > 3)
     {
-        printf("Incorrect Argument Count");
+        printf("Invalid number of arguments\n");
         exit(EXIT_FAILURE);
     }
     /* place default hostname if required */
@@ -263,7 +262,8 @@ void getInputFromUser(char *buf, size_t bufSize, int sockfd)
         exit(EXIT_FAILURE);
 
     }
-    while(buf[strlen(buf) - 1] == '\r' || buf[strlen(buf) - 1] == '\n') {
+    while (buf[strlen(buf) - 1] == '\r' || buf[strlen(buf) - 1] == '\n')
+    {
         buf[strlen(buf) - 1] = 0; /* kill break lines */
     }
 
@@ -298,10 +298,10 @@ int validateComposeField(int iterationNumber, char *token, int sockfd)
             }
             break;
         default:
-            sprintf(errMsg,"got invalid iteration number (%d)", iterationNumber);
+            sprintf(errMsg, "got invalid iteration number (%d)", iterationNumber);
             handleUnexpectedError(errMsg, sockfd);
     }
-    if(gotError)
+    if (gotError)
     {
         printf("Invalid field - suppose to start with \'%s \'\n", field);
         return -1;
@@ -316,7 +316,7 @@ void getOperationFromUser(int sockfd, bool *clientIsActive)
     char *token, opCode;
     short mailId;
     long parsedMailId;
-    while(true) /* iterate until a valid opcode is given */
+    while (true) /* iterate until a valid opcode is given */
     {
         getInputFromUser(buf, BUF_SIZE, sockfd);
 
@@ -380,8 +380,10 @@ void sendChatMessage(int sockfd, char *buf)
     sendData(sockfd, msg);
 }
 
-char* incStartIdx(char* buf, int i) {
-    switch (i) {
+char *incStartIdx(char *buf, int i)
+{
+    switch (i)
+    {
         case 0: /* To: */
             return buf + 4;
         case 1: /* Subject: */
@@ -390,7 +392,7 @@ char* incStartIdx(char* buf, int i) {
             return buf + 6;
         default:
             return NULL;
-}
+    }
 }
 
 void composeNewMail(int sockfd)

@@ -27,7 +27,6 @@
 #define NUM_OF_CLIENTS 20
 #define BUF_SIZE 4096
 #define ERROR_MSG_SIZE 100
-#define MAX_LOGIN_ATTEMPTS 3
 
 #define OP_SHOWINBOX 's'
 #define OP_SHOW_ONLINE_USERS 'u'
@@ -42,7 +41,6 @@
 
 #define LOG_REQUEST 'r'
 #define LOG_KILL 'k'
-
 
 void sendall(int sockfd, char *buf, int *len);
 

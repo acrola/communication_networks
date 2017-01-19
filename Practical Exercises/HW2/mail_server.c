@@ -10,6 +10,7 @@ typedef struct Account
     char password[MAX_PASSWORD + 1];
     unsigned short *inbox_mail_indices;
     unsigned short inbox_size;
+    int fd;
     bool online;
 } Account;
 
@@ -25,14 +26,14 @@ typedef struct Mail
 Account *accounts[NUM_OF_CLIENTS];
 Mail *mails[MAXMAILS];
 
-unsigned int users_num; /* value will be init'ed in read_file() ... */
+unsigned int users_num; /* value will be init'ed in loadUsersFromFile() ... */
 unsigned short mails_num = 0;
+
+void analyzeProgramArguments(int argc, char **argv, char **path, char **port);
 
 int isInt(char *str);
 
-bool read_file(char *path);
-
-void serverLoop(int sock, Account *currentAccount);
+bool loadUsersFromFile(char *path);
 
 void show_inbox_operation(int sock, Account *account);
 
@@ -46,7 +47,7 @@ void sendToClientPrint(int sock, char *msg);
 
 void sendHalt(int sock);
 
-Account *loginToAccount(int sock);
+void handleLoginRequest(int sockfd, fd_set *connectedFds);
 
 void closeAllSockets(int fdmax, fd_set *set);
 
@@ -56,7 +57,8 @@ int main(int argc, char *argv[])
 {
     char *port;
     char *path;
-    int listen_sock, new_sock, fdmax;
+    char op;
+    int listen_sock, new_sock, fdmax, sockfd;
     socklen_t sin_size;
     struct sockaddr_in myaddr, their_addr;
     Account *currentAccount;
@@ -68,29 +70,9 @@ int main(int argc, char *argv[])
     FD_ZERO(&master);
     FD_ZERO(&read_fds);
 
-    if (argc > 3)
-    {
-        printf("Incorrect Argument Count");
-        exit(EXIT_FAILURE);
-    }
+    analyzeProgramArguments(argc, argv, &path, &port);
 
-    path = argv[1];
-
-    if (argc == 3)
-    {
-        if (!isInt(argv[2]))
-        {
-            printf("Please enter a valid number as the port number");
-            exit(EXIT_FAILURE);
-        }
-        port = argv[2];
-    }
-    else
-    {
-        port = DEFAULT_PORT;
-    }
-
-    read_file(path);
+    loadUsersFromFile(path);
 
     /* open IPv4 TCP socket*/
     trySysCall((listen_sock = socket(PF_INET, SOCK_STREAM, 0)), "Could not open socket", -1);
@@ -112,7 +94,7 @@ int main(int argc, char *argv[])
     FD_SET(listen_sock, &master);
     fdmax = listen_sock;
 
-    /*start serving...*/
+    /*server loop*/
     while (true)
     {
         read_fds = master;
@@ -120,35 +102,56 @@ int main(int argc, char *argv[])
                                    fdmax);
 
         /*handle read-ready sockets*/
-        for (int sockfd = 0; sockfd <= fdmax; ++sockfd)
+        for (sockfd = 0; sockfd <= fdmax; ++sockfd)
         {
             if (FD_ISSET(sockfd, &read_fds)) /*we got a read-ready socket!*/
             {
                 if (sockfd == listen_sock) /*got a new connection request*/
                 {
-                    multipleSockets_trySyscall(
-                            (new_sock = accept(listen_sock, (struct sockaddr *) &their_addr, &sin_size)),
-                            "Could not accept connection", &master, fdmax);
-
+                    /* accept a new client (connection with it will be done via new_sock) */
+                    new_sock = accept(listen_sock, (struct sockaddr *) &their_addr, &sin_size);
+                    multipleSockets_trySyscall(new_sock, "Could not accept connection", &master, fdmax);
+                    /*we add the new socket to the master fd set and update fdmax if necessary*/
+                    FD_SET(new_sock, &master);
+                    if (new_sock > fdmax)
+                    {
+                        fdmax = new_sock;
+                    }
+                    /*the connection with the user is established - send a welcome message*/
+                    sendToClientPrint(new_sock, WELCOME_MSG);
+                    /*let the client know it should login and continue handling other fds*/
+                    send_char(new_sock, LOG_REQUEST);
+                }
+                else
+                {
+                    multipleSockets_trySyscall(recv(sockfd, &op, 1, 0), "Failed to reciece op from client", &master,
+                                               fdmax);
+                    switch (op)
+                    {
+                        case LOG_REQUEST:
+                            handleLoginRequest(sockfd, &master);
+                            break;
+                        case OP_SHOWINBOX:
+                            show_inbox_operation(sockfd, currentAccount);
+                            break;
+                        case OP_GETMAIL:
+                            get_mail_operation(sockfd, currentAccount);
+                            break;
+                        case OP_DELETEMAIL:
+                            delete_mail_operation(sockfd, currentAccount);
+                            break;
+                        case OP_QUIT: /* client quitted - we update that it's offline and return*/
+                            currentAccount->online = false;
+                            return;
+                        case OP_COMPOSE:
+                            compose_operation(sockfd, currentAccount);
+                            break;
+                        default:;
+                    }
                 }
             }
 
         }
-        /* accept a new client (connection with it will be done via new_sock) */
-        trySysCall((new_sock = accept(listen_sock, (struct sockaddr *) &their_addr, &sin_size)),
-                   "Could not accept connection",
-                   listen_sock);
-        /*the connection with the user is established - send a welcome message*/
-        sendToClientPrint(new_sock, WELCOME_MSG);
-        /* reached here, has connection with client - validate username and password */
-        if ((currentAccount = loginToAccount(new_sock)) != NULL)
-        {
-            /* validation is done - start taking orders from client */
-            serverLoop(new_sock, currentAccount);
-        }
-        /* close the accepted socket and wait for a new client */
-        tryClose(new_sock);
-
     }
     /* todo free dynamic accounts and mails */
 }
@@ -365,7 +368,7 @@ void delete_mail_operation(int sock, Account *account)
     sendHalt(sock);
 }
 
-bool read_file(char *path)
+bool loadUsersFromFile(char *path)
 {
     FILE *fp;
     Account *account_ptr;
@@ -383,11 +386,12 @@ bool read_file(char *path)
         account_ptr = (Account *) malloc(sizeof(Account));
         if (!account_ptr)
         {
-            printf("Allocation of new account failed in read_file.\nExiting...\n");
+            printf("Allocation of new account failed in loadUsersFromFile.\nExiting...\n");
             exit(EXIT_FAILURE);
         }
         account_ptr->inbox_mail_indices = NULL;
         account_ptr->online = false;
+        account_ptr->fd = -1;
         account_ptr->inbox_size = 0;
         if (fscanf(fp, "%s\t%s", account_ptr->username, account_ptr->password) < 0)
         {
@@ -407,64 +411,35 @@ bool read_file(char *path)
     return true;
 }
 
-Account *loginToAccount(int sock)
+void handleLoginRequest(int sockfd, fd_set *connectedFds)
 {
-    int i, auth_attempts = 0;
+    int i;
     char username[MAX_USERNAME] = {0};
     char password[MAX_PASSWORD] = {0};
-    while (true)
-    {
-        send_char(sock, LOG_REQUEST);
-        recvData(sock, username);
-        recvData(sock, password);
-        for (i = 0; i < users_num; i++)
-        {
-            if ((strcmp(accounts[i]->username, username) == 0) && (strcmp(accounts[i]->password, password) == 0))
-            {
-                accounts[i]->online = true;
-                sendToClientPrint(sock, CONNECTED_MSG);
-                sendHalt(sock); /* login successful, wait for input from user */
-                return accounts[i];
-            }
-        }
 
-        auth_attempts++;
-        if (auth_attempts >= MAX_LOGIN_ATTEMPTS)
-        {
-            sendToClientPrint(sock, "LOGIN FAILED - GOT KILL FROM SERVER\n");
-            send_char(sock, LOG_KILL);
-            return NULL;
-        }
-        sendToClientPrint(sock, "LOGIN ATTEMPT FAILED\n");
-    }
-}
-
-void serverLoop(int sock, Account *currentAccount)
-{
-    /* when here, after sock establishment and user auth. keep listening for ops */
-    while (true)
+    recvData(sockfd, username);
+    recvData(sockfd, password);
+    for (i = 0; i < users_num; i++)
     {
-        switch (recv_char(sock))
+        /*if we found a matching user - update user online status and socket fd*/
+        if ((strcmp(accounts[i]->username, username) == 0) && (strcmp(accounts[i]->password, password) == 0))
         {
-            case OP_SHOWINBOX:
-                show_inbox_operation(sock, currentAccount);
-                break;
-            case OP_GETMAIL:
-                get_mail_operation(sock, currentAccount);
-                break;
-            case OP_DELETEMAIL:
-                delete_mail_operation(sock, currentAccount);
-                break;
-            case OP_QUIT: /* client quitted - we update that it's offline and return*/
-                currentAccount->online = false;
-                return;
-            case OP_COMPOSE:
-                compose_operation(sock, currentAccount);
-                break;
-            default:;
+            accounts[i]->online = true;
+            accounts[i]->fd = sockfd;
+            sendToClientPrint(sockfd, CONNECTED_MSG);
+            sendHalt(sockfd); /* login successful, wait for input from user */
+            return;
+
         }
     }
+    /*failed to authenticate user - kill client, close socket and delete it from the socket set*/
+    send_char(sockfd, LOG_KILL);
+    tryClose(sockfd);
+    FD_CLR(sockfd, connectedFds);
+
+
 }
+
 
 int isInt(char *str)
 {
@@ -494,4 +469,30 @@ void sendToClientPrint(int sock, char *msg)
 void sendHalt(int sock)
 {
     send_char(sock, OP_HALT);
+}
+
+
+void analyzeProgramArguments(int argc, char **argv, char **path, char **port)
+{
+    if (argc > 3 || argc < 2)
+    {
+        printf("Invalid number of arguments");
+        exit(EXIT_FAILURE);
+    }
+
+    *path = argv[1];
+
+    if (argc == 3)
+    {
+        if (!isInt(argv[2]))
+        {
+            printf("Please enter a valid number as the port number");
+            exit(EXIT_FAILURE);
+        }
+        *port = argv[2];
+    }
+    else
+    {
+        *port = DEFAULT_PORT;
+    }
 }
