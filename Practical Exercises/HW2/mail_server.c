@@ -48,15 +48,25 @@ void sendHalt(int sock);
 
 Account *loginToAccount(int sock);
 
+void closeAllSockets(int fdmax, fd_set *set);
+
+void multipleSockets_trySyscall(int syscallResult, char *msg, fd_set *connectedFds, int fdmax);
+
 int main(int argc, char *argv[])
 {
     char *port;
     char *path;
-    int sock, new_sock;
+    int listen_sock, new_sock, fdmax;
     socklen_t sin_size;
     struct sockaddr_in myaddr, their_addr;
     Account *currentAccount;
     mails_num = 0;
+
+    /*we initiliaze fd sets*/
+    fd_set master;
+    fd_set read_fds;
+    FD_ZERO(&master);
+    FD_ZERO(&read_fds);
 
     if (argc > 3)
     {
@@ -83,26 +93,51 @@ int main(int argc, char *argv[])
     read_file(path);
 
     /* open IPv4 TCP socket*/
-    trySysCall((sock = socket(PF_INET, SOCK_STREAM, 0)), "Could not open socket", -1);
+    trySysCall((listen_sock = socket(PF_INET, SOCK_STREAM, 0)), "Could not open socket", -1);
 
     /* IPv4 with given port. We dont care what address*/
     myaddr.sin_family = AF_INET;
     myaddr.sin_port = htons((uint16_t) strtol(port, NULL, 10));
     myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
     /* try to bind*/
-    trySysCall(bind(sock, (struct sockaddr *) &(myaddr), sizeof(myaddr)), "Could not bind socket", sock);
+    trySysCall(bind(listen_sock, (struct sockaddr *) &(myaddr), sizeof(myaddr)), "Could not bind socket", listen_sock);
     /* try to listen to the ether*/
-    trySysCall(listen(sock, 1), "Could not listen to socket", sock);
+    trySysCall(listen(listen_sock, 1), "Could not listen to socket", listen_sock);
 
     sin_size = sizeof(struct sockaddr_in);
-    /* accept the connection */
-    /* by this point we have a connection. play the game */
-    /* we can close the listening socket and play with the active socket */
+
+    /* by this point we have a connection*/
+
+    /*we update our fd sets - for now we only have the listening socket.*/
+    FD_SET(listen_sock, &master);
+    fdmax = listen_sock;
+
+    /*start serving...*/
     while (true)
     {
+        read_fds = master;
+        multipleSockets_trySyscall(select(fdmax + 1, &read_fds, NULL, NULL, NULL), "Select operation failed", &master,
+                                   fdmax);
+
+        /*handle read-ready sockets*/
+        for (int sockfd = 0; sockfd <= fdmax; ++sockfd)
+        {
+            if (FD_ISSET(sockfd, &read_fds)) /*we got a read-ready socket!*/
+            {
+                if (sockfd == listen_sock) /*got a new connection request*/
+                {
+                    multipleSockets_trySyscall(
+                            (new_sock = accept(listen_sock, (struct sockaddr *) &their_addr, &sin_size)),
+                            "Could not accept connection", &master, fdmax);
+
+                }
+            }
+
+        }
         /* accept a new client (connection with it will be done via new_sock) */
-        trySysCall((new_sock = accept(sock, (struct sockaddr *) &their_addr, &sin_size)), "Could not accept connection",
-                   sock);
+        trySysCall((new_sock = accept(listen_sock, (struct sockaddr *) &their_addr, &sin_size)),
+                   "Could not accept connection",
+                   listen_sock);
         /*the connection with the user is established - send a welcome message*/
         sendToClientPrint(new_sock, WELCOME_MSG);
         /* reached here, has connection with client - validate username and password */
@@ -116,6 +151,30 @@ int main(int argc, char *argv[])
 
     }
     /* todo free dynamic accounts and mails */
+}
+
+void multipleSockets_trySyscall(int syscallResult, char *msg, fd_set *connectedFds, int fdmax)
+{
+    if (syscallResult < 1)
+    {
+        perror(msg);
+        closeAllSockets(fdmax, connectedFds);
+        exit(EXIT_FAILURE);
+    }
+
+}
+
+void closeAllSockets(int fdmax, fd_set *set)
+{
+    /*iterate thorugh all possible fds, close only those that really exist*/
+    for (int sockfd = 0; sockfd <= fdmax; ++sockfd)
+    {
+        if (FD_ISSET(sockfd, set))
+        {
+            tryClose(sockfd);
+        }
+    }
+
 }
 
 
@@ -197,11 +256,13 @@ void compose_operation(int sock, Account *account)
             tempAccount->inbox_mail_indices[tempAccount->inbox_size] = mails_num; /* add mail idx to indices list */
             tempAccount->inbox_size++;
 
-        } while ((recipient = strtok(NULL, ",")));
+        }
+        while ((recipient = strtok(NULL, ",")));
     }
 
     mails_num++; /* increase number of total mails in system */
-    if (currentMail->recipients_num == 0) {
+    if (currentMail->recipients_num == 0)
+    {
         sendToClientPrint(sock, "Mail was not sent - unknown recipients.\n");
         /*even though we say the mail was not sent we still save it on our system*/
     }
@@ -262,7 +323,6 @@ void get_mail_operation(int sock, Account *account)
     {
         sendToClientPrint(sock, "Invalid selection\n");
     }
-
     else
     {
         char mail_msg[BUF_SIZE];
@@ -423,7 +483,6 @@ int isInt(char *str)
     }
     return 1;
 }
-
 
 
 void sendToClientPrint(int sock, char *msg)
