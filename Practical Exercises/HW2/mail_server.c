@@ -25,9 +25,10 @@ typedef struct Mail
 
 Account *accounts[NUM_OF_CLIENTS];
 Mail *mails[MAXMAILS];
-
 unsigned int users_num; /* value will be init'ed in loadUsersFromFile() ... */
 unsigned short mails_num = 0;
+fd_set master;
+int fdmax;
 
 void analyzeProgramArguments(int argc, char **argv, char **path, char **port);
 
@@ -35,37 +36,41 @@ int isInt(char *str);
 
 bool loadUsersFromFile(char *path);
 
-void show_inbox_operation(int sock, Account *account);
+void show_inbox_operation(int sockfd);
 
-void compose_operation(int sock, Account *account);
+void compose_operation(int sockfd);
 
-void get_mail_operation(int sock, Account *account);
+void get_mail_operation(int sockfd);
 
-void delete_mail_operation(int sock, Account *account);
+void delete_mail_operation(int sockfd);
 
 void sendToClientPrint(int sock, char *msg);
 
 void sendHalt(int sock);
 
-void handleLoginRequest(int sockfd, fd_set *connectedFds);
+void handleLoginRequest(int sockfd);
 
 void closeAllSockets(int fdmax, fd_set *set);
 
-void multipleSockets_trySyscall(int syscallResult, char *msg, fd_set *connectedFds, int fdmax);
+void multipleSockets_trySyscall(int syscallResult, char *msg);
+
+Account *getAccountBySockfd(int sockfd);
+
+void show_online_users(int sockfd);
+
+void handleQuitOperation(int sockfd);
 
 int main(int argc, char *argv[])
 {
     char *port;
     char *path;
     char op;
-    int listen_sock, new_sock, fdmax, sockfd;
+    int listen_sock, new_sock, sockfd;
     socklen_t sin_size;
     struct sockaddr_in myaddr, their_addr;
-    Account *currentAccount;
     mails_num = 0;
 
     /*we initiliaze fd sets*/
-    fd_set master;
     fd_set read_fds;
     FD_ZERO(&master);
     FD_ZERO(&read_fds);
@@ -98,8 +103,7 @@ int main(int argc, char *argv[])
     while (true)
     {
         read_fds = master;
-        multipleSockets_trySyscall(select(fdmax + 1, &read_fds, NULL, NULL, NULL), "Select operation failed", &master,
-                                   fdmax);
+        multipleSockets_trySyscall(select(fdmax + 1, &read_fds, NULL, NULL, NULL), "Select operation failed");
 
         /*handle read-ready sockets*/
         for (sockfd = 0; sockfd <= fdmax; ++sockfd)
@@ -110,7 +114,7 @@ int main(int argc, char *argv[])
                 {
                     /* accept a new client (connection with it will be done via new_sock) */
                     new_sock = accept(listen_sock, (struct sockaddr *) &their_addr, &sin_size);
-                    multipleSockets_trySyscall(new_sock, "Could not accept connection", &master, fdmax);
+                    multipleSockets_trySyscall(new_sock, "Could not accept connection");
                     /*we add the new socket to the master fd set and update fdmax if necessary*/
                     FD_SET(new_sock, &master);
                     if (new_sock > fdmax)
@@ -124,29 +128,34 @@ int main(int argc, char *argv[])
                 }
                 else
                 {
-                    multipleSockets_trySyscall(recv(sockfd, &op, 1, 0), "Failed to reciece op from client", &master,
-                                               fdmax);
+                    multipleSockets_trySyscall(recv(sockfd, &op, 1, 0), "Failed to receive op from client");
                     switch (op)
                     {
                         case LOG_REQUEST:
-                            handleLoginRequest(sockfd, &master);
+                            handleLoginRequest(sockfd);
                             break;
                         case OP_SHOWINBOX:
-                            show_inbox_operation(sockfd, currentAccount);
+                            show_inbox_operation(sockfd);
                             break;
+                        case OP_SHOW_ONLINE_USERS:
+                            show_online_users(sockfd);
+                            break;
+                        case OP_CHAT_MSG:
+                            break; //todo
                         case OP_GETMAIL:
-                            get_mail_operation(sockfd, currentAccount);
+                            get_mail_operation(sockfd);
                             break;
                         case OP_DELETEMAIL:
-                            delete_mail_operation(sockfd, currentAccount);
+                            delete_mail_operation(sockfd);
                             break;
-                        case OP_QUIT: /* client quitted - we update that it's offline and return*/
-                            currentAccount->online = false;
-                            return;
-                        case OP_COMPOSE:
-                            compose_operation(sockfd, currentAccount);
+                        case OP_QUIT:
+                            handleQuitOperation(sockfd);
                             break;
-                        default:;
+                        case OP_COMPOSE://todo
+                            compose_operation(sockfd);
+                            break;
+                        default:
+                            handleUnexpectedError("Invalid opcode", sockfd);
                     }
                 }
             }
@@ -156,12 +165,26 @@ int main(int argc, char *argv[])
     /* todo free dynamic accounts and mails */
 }
 
-void multipleSockets_trySyscall(int syscallResult, char *msg, fd_set *connectedFds, int fdmax)
+void handleQuitOperation(int sockfd)
+{
+    Account *account = getAccountBySockfd(sockfd);
+    /*update account's online status. fd of an offline account is being set to -1*/
+    account->online = false;
+    account->fd = -1;
+    /*close the client's socket and update the socket fd set*/
+    tryClose(sockfd);
+    FD_CLR(sockfd, &master);
+
+
+
+}
+
+void multipleSockets_trySyscall(int syscallResult, char *msg)
 {
     if (syscallResult < 1)
     {
         perror(msg);
-        closeAllSockets(fdmax, connectedFds);
+        closeAllSockets(fdmax, &master);
         exit(EXIT_FAILURE);
     }
 
@@ -195,7 +218,7 @@ Account *getAccountByUsername(char *username)
 }
 
 
-void compose_operation(int sock, Account *account)
+void compose_operation(int sockfd)
 {
     Account *tempAccount;
     char targets[TOTAL_TO * (MAX_USERNAME + 1)];
@@ -205,14 +228,14 @@ void compose_operation(int sock, Account *account)
     if (currentMail == NULL)
     {
         printf("Failed allocating memory for new mail struct in compose_operation.\nExiting...\n");
-        tryClose(sock);
+        tryClose(sockfd);
         exit(EXIT_FAILURE);
     }
 
-    recvData(sock, targets);
-    recvData(sock, currentMail->subject);
-    recvData(sock, currentMail->content);
-    currentMail->sender = account;
+    recvData(sockfd, targets);
+    recvData(sockfd, currentMail->subject);
+    recvData(sockfd, currentMail->content);
+    currentMail->sender = getAccountBySockfd(sockfd);
     mails[mails_num] = currentMail;
     currentMail->recipients_num = 0;
 
@@ -253,7 +276,7 @@ void compose_operation(int sock, Account *account)
             if (tempAccount->inbox_mail_indices == NULL)
             {
                 printf("Failed allocating memory for inbox mail indices in compose_operation.\nExiting...\n");
-                tryClose(sock);
+                tryClose(sockfd);
                 exit(EXIT_FAILURE);
             }
             tempAccount->inbox_mail_indices[tempAccount->inbox_size] = mails_num; /* add mail idx to indices list */
@@ -266,21 +289,21 @@ void compose_operation(int sock, Account *account)
     mails_num++; /* increase number of total mails in system */
     if (currentMail->recipients_num == 0)
     {
-        sendToClientPrint(sock, "Mail was not sent - unknown recipients.\n");
+        sendToClientPrint(sockfd, "Mail was not sent - unknown recipients.\n");
         /*even though we say the mail was not sent we still save it on our system*/
     }
     else
     {
         if (allTargetsValid)
         {
-            sendToClientPrint(sock, "Mail sent\n");
+            sendToClientPrint(sockfd, "Mail sent\n");
         }
         else
         {
-            sendToClientPrint(sock, "Mail sent (some recipients were unidentified)\n");
+            sendToClientPrint(sockfd, "Mail sent (some recipients were unidentified)\n");
         }
     }
-    sendHalt(sock);
+    sendHalt(sockfd);
 }
 
 
@@ -292,11 +315,12 @@ Mail *account_mail_access(Account *account, short mail_idx)
 }
 
 
-void show_inbox_operation(int sock, Account *account)
+void show_inbox_operation(int sockfd)
 {
     short i;
     char mail_msg[BUF_SIZE];
     Mail *currentMail;
+    Account *account = getAccountBySockfd(sockfd);
     for (i = 1; i <= account->inbox_size; i++)
     {
         currentMail = account_mail_access(account, i);
@@ -309,27 +333,45 @@ void show_inbox_operation(int sock, Account *account)
             strcat(mail_msg, " \"");
             strcat(mail_msg, currentMail->subject);
             strcat(mail_msg, "\"\n");
-            sendToClientPrint(sock, mail_msg);
+            sendToClientPrint(sockfd, mail_msg);
         }
     }
-    sendHalt(sock);
+    sendHalt(sockfd);
 }
 
 
-void get_mail_operation(int sock, Account *account)
+
+Account *getAccountBySockfd(int sockfd)
 {
-    short mail_idx = getDataSize(sock);
     int i;
+    for (i = 0; i < users_num; ++i)
+    {
+        if (accounts[i]->fd == sockfd)
+        {
+            return accounts[i];
+        }
+
+    }
+    /*this function is being used only after user authentication, hence it should not get here*/
+    handleUnexpectedError("No account was found for the given socket fd", sockfd);
+    return NULL;
+}
+
+
+void get_mail_operation(int sockfd)
+{
+    short mail_idx = getDataSize(sockfd);
+    int i;
+    Account *account = getAccountBySockfd(sockfd);
     Mail *currentMail = account_mail_access(account, mail_idx);
 
     if (currentMail == NULL)
     {
-        sendToClientPrint(sock, "Invalid selection\n");
+        sendToClientPrint(sockfd, "Invalid mail ID\n");
     }
     else
     {
         char mail_msg[BUF_SIZE];
-
         memset(mail_msg, 0, BUF_SIZE);
         strcat(mail_msg, "From: ");
         strcat(mail_msg, currentMail->sender->username);
@@ -347,25 +389,26 @@ void get_mail_operation(int sock, Account *account)
         strcat(mail_msg, "\nText: ");
         strcat(mail_msg, currentMail->content);
         strcat(mail_msg, "\n");
-        sendToClientPrint(sock, mail_msg);
+        sendToClientPrint(sockfd, mail_msg);
     }
-    sendHalt(sock);
+    sendHalt(sockfd);
 }
 
-void delete_mail_operation(int sock, Account *account)
+void delete_mail_operation(int sockfd)
 {
-    short mail_idx = getDataSize(sock);
+    short mail_idx = getDataSize(sockfd);
+    Account *account = getAccountBySockfd(sockfd);
     Mail *currentMail = account_mail_access(account, mail_idx);
 
     if (currentMail == NULL)
     {
-        sendToClientPrint(sock, "Invalid selection\n");
+        sendToClientPrint(sockfd, "Invalid mail ID\n");
     }
     else
     {
         account->inbox_mail_indices[mail_idx - 1] = MAXMAILS;
     }
-    sendHalt(sock);
+    sendHalt(sockfd);
 }
 
 bool loadUsersFromFile(char *path)
@@ -411,7 +454,7 @@ bool loadUsersFromFile(char *path)
     return true;
 }
 
-void handleLoginRequest(int sockfd, fd_set *connectedFds)
+void handleLoginRequest(int sockfd)
 {
     int i;
     char username[MAX_USERNAME] = {0};
@@ -435,9 +478,7 @@ void handleLoginRequest(int sockfd, fd_set *connectedFds)
     /*failed to authenticate user - kill client, close socket and delete it from the socket set*/
     send_char(sockfd, LOG_KILL);
     tryClose(sockfd);
-    FD_CLR(sockfd, connectedFds);
-
-
+    FD_CLR(sockfd, &master);
 }
 
 
@@ -495,4 +536,28 @@ void analyzeProgramArguments(int argc, char **argv, char **path, char **port)
     {
         *port = DEFAULT_PORT;
     }
+}
+
+void show_online_users(int sockfd)
+{
+    short i;
+    char buf[BUF_SIZE] = {0};
+    strcat(buf, "Online users: ");
+    bool flag = false;
+    for (i = 0; i < users_num; i++)
+    {
+        if (accounts[i]->online)
+        {
+            if(flag)/*comma separation handling - the "if" will be entered only if there's more than one user online*/
+            {
+                strcat(buf, ", ");
+
+            }
+            strcat(buf, accounts[i]->username);
+            flag = true;
+        }
+    }
+    strcat(buf, "\n");
+    sendToClientPrint(sockfd, buf);
+    sendHalt(sockfd);
 }

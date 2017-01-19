@@ -236,6 +236,8 @@ void startLoginRequest(int sockfd)
     char password[MAX_PASSWORD + 1] = {0}; /* same here :) */
     while (!getLoginInputFromUser(username, USERNAME_FIELD_PREFIX, USERNAME_FIELD_NAME, MAX_USERNAME, sockfd));
     while (!getLoginInputFromUser(password, PASSWORD_FIELD_PREFIX, PASSWORD_FIELD_NAME, MAX_PASSWORD, sockfd));
+    /* let the server know we're sending login credentials */
+    send_char(sockfd, LOG_REQUEST);
     sendData(sockfd, username);
     sendData(sockfd, password);
 }
@@ -330,13 +332,13 @@ void getOperationFromUser(int sockfd, bool *clientIsActive)
         }
         printf("You entered an invalid operation. Please try again.\n");
     }
-    /* send the valid opcode to the server */
-    trySysCall(send(sockfd, &opCode, sizeof(char), 0), "Sending opcode to server failed", sockfd);
 
     switch (opCode)
     {
         case OP_SHOWINBOX:
         case OP_SHOW_ONLINE_USERS:
+            /* send the valid opcode to the server */
+            trySysCall(send(sockfd, &opCode, sizeof(char), 0), "Sending opcode to server failed", sockfd);
             break; /* client returns listening to the server */
         case OP_CHAT_MSG:
             sendChatMessage(sockfd, buf + strlen(CHAT_MSG_STR) + 1);
@@ -348,6 +350,8 @@ void getOperationFromUser(int sockfd, bool *clientIsActive)
             validateMailId(parsedMailId, sockfd);
             /* cast mail id to short in network order */
             mailId = htons((uint16_t)parsedMailId);
+            /* send the valid opcode to the server */
+            trySysCall(send(sockfd, &opCode, sizeof(char), 0), "Sending opcode to server failed", sockfd);
             /* send mail id to server */
             sendall_imm(sockfd, &mailId, sizeof(mailId));
             break;
@@ -371,11 +375,14 @@ void sendChatMessage(int sockfd, char *buf)
     char target[(MAX_USERNAME + 1)] = {0};
     char msg[BUF_SIZE] = {0};
     char *token;
+    char opCode = OP_CHAT_MSG;
     /*tokenize the target and the message and send to the server*/
     token = strtok(buf, ":");
     strcpy(target, token);
     token = strtok(NULL, "\n") + 1; /*+1 for to remove the space from the beginning*/
     strcpy(msg, token);
+    /* send the valid opcode to the server */
+    trySysCall(send(sockfd, &opCode, sizeof(char), 0), "Sending opcode to server failed", sockfd);
     sendData(sockfd, target);
     sendData(sockfd, msg);
 }
