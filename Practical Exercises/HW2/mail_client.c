@@ -18,6 +18,7 @@
 #define PASSWORD_FIELD_PREFIX "Password:"
 #define PASSWORD_FIELD_NAME "password"
 
+fd_set read_fds;
 
 /*
  * LOCAL FUNCTIONS DECLERATIONS
@@ -55,6 +56,7 @@ int main(int argc, char *argv[])
     char *hostname, *port;
     bool clientIsActive;
 
+
     /* analyze hostname and port no. */
     analyzeProgramArguments(argc, argv, &hostname, &port);
 
@@ -62,18 +64,37 @@ int main(int argc, char *argv[])
     sockfd = establishInitialConnection(hostname, port);
 
     clientIsActive = true;
+
+
+
     /* loop runs as long as the client wants to get data and no errors occur. */
     /* if the client quits or an error occurs - the clientIsActive is set to false, */
     /* we get out of the loop and shutdown the client program gracefully */
     while (clientIsActive)
     {
-        switch (recv_char(sockfd))
-        {
+        switch (recv_char(sockfd)) {
             case LOG_REQUEST:
                 startLoginRequest(sockfd);
                 break;
             case OP_HALT:
-                getOperationFromUser(sockfd, &clientIsActive); /* maybe set clientIsActive to zero (QUIT operation) */
+                //printf("got halt\n");
+                FD_ZERO(&read_fds);
+                FD_SET(STDIN, &read_fds);
+                FD_SET(sockfd, &read_fds);
+                multipleSockets_trySyscall(select(sockfd + 1, &read_fds, NULL, NULL, NULL), "Select operation failed", sockfd + 1, &read_fds);
+                // reaches here when server or user wants to send us more info
+
+                if (FD_ISSET(STDIN, &read_fds))
+                {
+                    //printf("selected user\n");
+
+                    // user *STARTED* entering information, block all sends from server until user finishes
+                    getOperationFromUser(sockfd, &clientIsActive); /* maybe set clientIsActive to zero (QUIT operation) */
+                }
+                else {
+                    //printf("selected server\n");
+
+                }
                 break;
             case OP_PRINT:
                 printDataFromServer(sockfd);
@@ -320,7 +341,9 @@ void getOperationFromUser(int sockfd, bool *clientIsActive)
     long parsedMailId;
     while (true) /* iterate until a valid opcode is given */
     {
+        //printf("new iteration]\n");
         getInputFromUser(buf, BUF_SIZE, sockfd);
+        //printf("%s\b", buf);
 
         token = strtok(buf, " \t\r\n");
         opCode = getOpCode(token);
@@ -376,12 +399,23 @@ void sendChatMessage(int sockfd, char *buf)
     char msg[BUF_SIZE] = {0};
     char *token;
     char opCode = OP_CHAT_MSG;
-    /*tokenize the target and the message and send to the server*/
+
+
+
     token = strtok(buf, ":");
+
+    //printf("token: %s, len: %d\n", token, strlen(token));
+    //printf("buf: %s, len: %d\n", buf, strlen(buf));
     strcpy(target, token);
-    token = strtok(NULL, "\n") + 1; /*+1 for to remove the space from the beginning*/
+    //printf("1\n");
+    token = strtok(NULL, "\n") + 1;
+    //printf("2\n");
+    //printf("token p: %p, buf p %p \n", token, buf);
+
+    //printf("token: %s, len: %d\n", token, strlen(token));
+    //printf("buf: %s, len: %d\n", buf, strlen(buf));
     strcpy(msg, token);
-    /* send the valid opcode to the server */
+
     trySysCall(send(sockfd, &opCode, sizeof(char), 0), "Sending opcode to server failed", sockfd);
     sendData(sockfd, target);
     sendData(sockfd, msg);
@@ -404,16 +438,21 @@ char *incStartIdx(char *buf, int i)
 
 void composeNewMail(int sockfd)
 {
-    char buf[BUF_SIZE];
+    char buf1[BUF_SIZE];
+    char buf2[BUF_SIZE];
+    char buf3[BUF_SIZE];
+    char* bufs[3] = {buf1, buf2, buf3};
+
     char *token;
     /* 3 loops - To, Subject, Text */
     int i;
+    send_char(sockfd, OP_COMPOSE);
     for (i = 0; i < 3; ++i)
     {
         /* get input (To / Subject / Text) */
-        getInputFromUser(buf, BUF_SIZE, sockfd);
+        getInputFromUser(bufs[i], BUF_SIZE, sockfd);
 
-        token = strtok(buf, " \t\r");
+        token = strtok(bufs[i], " \t\r");
 
         if (validateComposeField(i, token, sockfd) < 0)
         {
@@ -421,10 +460,12 @@ void composeNewMail(int sockfd)
             i--; /* so the current iteration will start over */
             continue;
         }
-        sendData(sockfd, incStartIdx(buf, i));
+    }
+    for (i = 0; i < 3; ++i)
+    {
+        sendData(sockfd, incStartIdx(bufs[i], i));
     }
 }
-
 void validateMailId(long parsedMailId, int sockfd)
 {
     if (parsedMailId < 1)

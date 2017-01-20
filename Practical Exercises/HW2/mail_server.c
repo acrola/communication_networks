@@ -10,8 +10,7 @@ typedef struct Account
     char password[MAX_PASSWORD + 1];
     unsigned short *inbox_mail_indices;
     unsigned short inbox_size;
-    int fd;
-    bool online;
+    int sockfd;
 } Account;
 
 typedef struct Mail
@@ -38,6 +37,8 @@ bool loadUsersFromFile(char *path);
 
 void show_inbox_operation(int sockfd);
 
+void chat_message_operation(int sockfd);
+
 void compose_operation(int sockfd);
 
 void get_mail_operation(int sockfd);
@@ -50,9 +51,6 @@ void sendHalt(int sock);
 
 void handleLoginRequest(int sockfd);
 
-void closeAllSockets(int fdmax, fd_set *set);
-
-void multipleSockets_trySyscall(int syscallResult, char *msg);
 
 Account *getAccountBySockfd(int sockfd);
 
@@ -103,7 +101,7 @@ int main(int argc, char *argv[])
     while (true)
     {
         read_fds = master;
-        multipleSockets_trySyscall(select(fdmax + 1, &read_fds, NULL, NULL, NULL), "Select operation failed");
+        multipleSockets_trySyscall(select(fdmax + 1, &read_fds, NULL, NULL, NULL), "Select operation failed", fdmax, &master);
 
         /*handle read-ready sockets*/
         for (sockfd = 0; sockfd <= fdmax; ++sockfd)
@@ -114,7 +112,7 @@ int main(int argc, char *argv[])
                 {
                     /* accept a new client (connection with it will be done via new_sock) */
                     new_sock = accept(listen_sock, (struct sockaddr *) &their_addr, &sin_size);
-                    multipleSockets_trySyscall(new_sock, "Could not accept connection");
+                    multipleSockets_trySyscall(new_sock, "Could not accept connection", fdmax, &master);
                     /*we add the new socket to the master fd set and update fdmax if necessary*/
                     FD_SET(new_sock, &master);
                     if (new_sock > fdmax)
@@ -128,7 +126,7 @@ int main(int argc, char *argv[])
                 }
                 else
                 {
-                    multipleSockets_trySyscall(recv(sockfd, &op, 1, 0), "Failed to receive op from client");
+                    multipleSockets_trySyscall(recv(sockfd, &op, 1, 0), "Failed to receive op from client", fdmax, &master);
                     switch (op)
                     {
                         case LOG_REQUEST:
@@ -141,7 +139,8 @@ int main(int argc, char *argv[])
                             show_online_users(sockfd);
                             break;
                         case OP_CHAT_MSG:
-                            break; //todo
+                            chat_message_operation(sockfd);
+                            break;
                         case OP_GETMAIL:
                             get_mail_operation(sockfd);
                             break;
@@ -151,10 +150,11 @@ int main(int argc, char *argv[])
                         case OP_QUIT:
                             handleQuitOperation(sockfd);
                             break;
-                        case OP_COMPOSE://todo
+                        case OP_COMPOSE:
                             compose_operation(sockfd);
                             break;
                         default:
+                            printf("Error: opcode is %c\n", op);
                             handleUnexpectedError("Invalid opcode", sockfd);
                     }
                 }
@@ -169,8 +169,7 @@ void handleQuitOperation(int sockfd)
 {
     Account *account = getAccountBySockfd(sockfd);
     /*update account's online status. fd of an offline account is being set to -1*/
-    account->online = false;
-    account->fd = -1;
+    account->sockfd = -1;
     /*close the client's socket and update the socket fd set*/
     tryClose(sockfd);
     FD_CLR(sockfd, &master);
@@ -179,29 +178,7 @@ void handleQuitOperation(int sockfd)
 
 }
 
-void multipleSockets_trySyscall(int syscallResult, char *msg)
-{
-    if (syscallResult < 1)
-    {
-        perror(msg);
-        closeAllSockets(fdmax, &master);
-        exit(EXIT_FAILURE);
-    }
 
-}
-
-void closeAllSockets(int fdmax, fd_set *set)
-{
-    /*iterate thorugh all possible fds, close only those that really exist*/
-    for (int sockfd = 0; sockfd <= fdmax; ++sockfd)
-    {
-        if (FD_ISSET(sockfd, set))
-        {
-            tryClose(sockfd);
-        }
-    }
-
-}
 
 
 Account *getAccountByUsername(char *username)
@@ -215,6 +192,65 @@ Account *getAccountByUsername(char *username)
         }
     }
     return NULL;
+}
+
+void chat_message_operation(int sockfd) {
+    Account *tempAccount;
+    char target[MAX_USERNAME + 1];
+    char content[MAX_CONTENT + 1];
+    char sendBuffer[MAX_USERNAME + MAX_CONTENT + 20] = {0};
+    Mail *mail; // may not need
+
+    // client sends all data at once, so we will not hang here
+    recvData(sockfd, target);
+    recvData(sockfd, content);
+
+    if ((tempAccount = getAccountByUsername(target)) == NULL) {
+        sendToClientPrint(sockfd, "Chat could not sent - unknown target\n");
+    } else {
+        if (tempAccount->sockfd > 0) { // target is online
+            strcat(sendBuffer, "New message from ");
+            strcat(sendBuffer, getAccountBySockfd(sockfd)->username);
+            strcat(sendBuffer, ": ");
+            strcat(sendBuffer, content);
+            strcat(sendBuffer, "\n");
+
+            sendToClientPrint(tempAccount->sockfd, sendBuffer);
+            sendHalt(tempAccount->sockfd);
+        } else {
+            // target is offline
+            if ((mail = (Mail *) malloc(sizeof(Mail))) == NULL) {
+                printf("Failed allocating memory for new mail struct in compose_operation.\nExiting...\n");
+                tryClose(sockfd);
+                exit(EXIT_FAILURE);
+            }
+
+            mail->sender = getAccountBySockfd(sockfd);
+            strcpy(mail->content, content);
+            strcpy(mail->subject, "Message received offline");
+            mail->recipients = (Account **) malloc(sizeof(Account *));
+            mail->recipients_num = 1;
+            mail->recipients[0] = tempAccount;
+
+            if (tempAccount->inbox_mail_indices == NULL) {
+                tempAccount->inbox_mail_indices = (unsigned short *) malloc((size_t)(sizeof(unsigned short)));
+            } else {
+                tempAccount->inbox_mail_indices = (unsigned short *) realloc(tempAccount->inbox_mail_indices,
+                                                                             (size_t)((tempAccount->inbox_size + 1) *
+                                                                                      sizeof(unsigned short)));
+            }
+            if (tempAccount->inbox_mail_indices == NULL) {
+                printf("Failed allocating memory for inbox mail indices in compose_operation.\nExiting...\n");
+                tryClose(sockfd);
+                exit(EXIT_FAILURE);
+            }
+            mails[mails_num] = mail;
+            tempAccount->inbox_mail_indices[tempAccount->inbox_size] = mails_num; /* add mail idx to indices list */
+            tempAccount->inbox_size++;
+            mails_num++;
+        }
+    }
+    sendHalt(sockfd);
 }
 
 
@@ -232,9 +268,11 @@ void compose_operation(int sockfd)
         exit(EXIT_FAILURE);
     }
 
+    // client sends all data at once, so we will not hang here
     recvData(sockfd, targets);
     recvData(sockfd, currentMail->subject);
     recvData(sockfd, currentMail->content);
+
     currentMail->sender = getAccountBySockfd(sockfd);
     mails[mails_num] = currentMail;
     currentMail->recipients_num = 0;
@@ -346,7 +384,7 @@ Account *getAccountBySockfd(int sockfd)
     int i;
     for (i = 0; i < users_num; ++i)
     {
-        if (accounts[i]->fd == sockfd)
+        if (accounts[i]->sockfd == sockfd)
         {
             return accounts[i];
         }
@@ -433,8 +471,7 @@ bool loadUsersFromFile(char *path)
             exit(EXIT_FAILURE);
         }
         account_ptr->inbox_mail_indices = NULL;
-        account_ptr->online = false;
-        account_ptr->fd = -1;
+        account_ptr->sockfd = -1; // mark as offline
         account_ptr->inbox_size = 0;
         if (fscanf(fp, "%s\t%s", account_ptr->username, account_ptr->password) < 0)
         {
@@ -467,8 +504,7 @@ void handleLoginRequest(int sockfd)
         /*if we found a matching user - update user online status and socket fd*/
         if ((strcmp(accounts[i]->username, username) == 0) && (strcmp(accounts[i]->password, password) == 0))
         {
-            accounts[i]->online = true;
-            accounts[i]->fd = sockfd;
+            accounts[i]->sockfd = sockfd;
             sendToClientPrint(sockfd, CONNECTED_MSG);
             sendHalt(sockfd); /* login successful, wait for input from user */
             return;
@@ -517,7 +553,7 @@ void analyzeProgramArguments(int argc, char **argv, char **path, char **port)
 {
     if (argc > 3 || argc < 2)
     {
-        printf("Invalid number of arguments");
+        printf("Invalid number of arguments\n");
         exit(EXIT_FAILURE);
     }
 
@@ -527,7 +563,7 @@ void analyzeProgramArguments(int argc, char **argv, char **path, char **port)
     {
         if (!isInt(argv[2]))
         {
-            printf("Please enter a valid number as the port number");
+            printf("Please enter a valid number as the port number\n");
             exit(EXIT_FAILURE);
         }
         *port = argv[2];
@@ -546,7 +582,7 @@ void show_online_users(int sockfd)
     bool flag = false;
     for (i = 0; i < users_num; i++)
     {
-        if (accounts[i]->online)
+        if (accounts[i]->sockfd > 0)
         {
             if(flag)/*comma separation handling - the "if" will be entered only if there's more than one user online*/
             {
