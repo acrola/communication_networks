@@ -418,14 +418,17 @@ char *incStartIdx(char *buf, int i)
 
 void composeNewMail(int sockfd)
 {
+    char *token;
+    int i;
     char to[BUF_SIZE];
     char subject[BUF_SIZE];
     char text[BUF_SIZE];
-    char *bufs[3] = {to, subject, text};
+    char *bufs[3];
+    bufs[0] = to;
+    bufs[1] = subject;
+    bufs[2] = text;
 
-    char *token;
     /* 3 loops - To, Subject, Text */
-    int i;
     for (i = 0; i < 3; ++i)
     {
         /* get input (To / Subject / Text) */

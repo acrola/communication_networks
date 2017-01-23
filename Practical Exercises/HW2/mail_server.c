@@ -70,12 +70,13 @@ int main(int argc, char *argv[])
     int listen_sock, new_sock, sockfd;
     socklen_t sin_size;
     struct sockaddr_in myaddr, their_addr;
-    mails_num = 0;
 
     /*we initiliaze fd sets*/
     fd_set read_fds;
     FD_ZERO(&master);
     FD_ZERO(&read_fds);
+
+    mails_num = 0;
 
     analyzeProgramArguments(argc, argv, &path, &port);
 
@@ -201,9 +202,9 @@ void chat_message_operation(int sockfd)
     char recipient[MAX_USERNAME + 1];
     char content[MAX_CONTENT + 1];
     char sendBuffer[MAX_USERNAME + MAX_CONTENT + 20] = {0};
-    Mail *mail; // may not need
+    Mail *mail;
 
-    // client sends all data at once, so we will not hang here
+    /* client sends all data at once, so we will not hang here */
     recvData(sockfd, recipient);
     recvData(sockfd, content);
 
@@ -214,7 +215,7 @@ void chat_message_operation(int sockfd)
     else
     {
         if (tempAccount->sockfd > 0)
-        { // recipient is online
+        { /* recipient is online */
             strcat(sendBuffer, "New message from ");
             strcat(sendBuffer, getAccountBySockfd(sockfd)->username);
             strcat(sendBuffer, ": ");
@@ -226,7 +227,7 @@ void chat_message_operation(int sockfd)
         }
         else
         {
-            // recipient is offline
+            /* recipient is offline */
             if ((mail = (Mail *) malloc(sizeof(Mail))) == NULL)
             {
                 printf("Failed allocating memory for new mail struct in compose_operation.\nExiting...\n");
@@ -281,7 +282,7 @@ void compose_operation(int sockfd)
         exit(EXIT_FAILURE);
     }
 
-    // client sends all data at once, so we will not hang here
+    /* client sends all data at once, so we will not hang here */
     recvData(sockfd, targets);
     recvData(sockfd, currentMail->subject);
     recvData(sockfd, currentMail->content);
@@ -483,7 +484,7 @@ bool loadUsersFromFile(char *path)
             exit(EXIT_FAILURE);
         }
         account_ptr->inbox_mail_indices = NULL;
-        account_ptr->sockfd = -1; // mark as offline
+        account_ptr->sockfd = -1; /* mark as offline */
         account_ptr->inbox_size = 0;
         if (fscanf(fp, "%s\t%s", account_ptr->username, account_ptr->password) < 0)
         {
@@ -613,8 +614,9 @@ void show_online_users(int sockfd)
 
 void closeAllSockets()
 {
+    int sockfd;
     /*iterate thorugh all possible fds, close only those that really exist*/
-    for (int sockfd = 0; sockfd <= fdmax; ++sockfd)
+    for (sockfd = 0; sockfd <= fdmax; ++sockfd)
     {
         if (FD_ISSET(sockfd, &master))
         {
