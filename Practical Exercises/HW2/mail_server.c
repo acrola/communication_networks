@@ -2,6 +2,7 @@
 
 #define WELCOME_MSG "Welcome! I am simple-mail-server\n"
 #define CONNECTED_MSG "Connected to server\n"
+#define OFFLINE_MSG_SUBJECT "Message received offline"
 
 
 typedef struct Account
@@ -51,6 +52,9 @@ void sendHalt(int sock);
 
 void handleLoginRequest(int sockfd);
 
+void closeAllSockets();
+
+void multipleSockets_trySyscall(int syscallResult, char *msg);
 
 Account *getAccountBySockfd(int sockfd);
 
@@ -101,7 +105,7 @@ int main(int argc, char *argv[])
     while (true)
     {
         read_fds = master;
-        multipleSockets_trySyscall(select(fdmax + 1, &read_fds, NULL, NULL, NULL), "Select operation failed", fdmax, &master);
+        multipleSockets_trySyscall(select(fdmax + 1, &read_fds, NULL, NULL, NULL), "Select operation failed");
 
         /*handle read-ready sockets*/
         for (sockfd = 0; sockfd <= fdmax; ++sockfd)
@@ -112,7 +116,7 @@ int main(int argc, char *argv[])
                 {
                     /* accept a new client (connection with it will be done via new_sock) */
                     new_sock = accept(listen_sock, (struct sockaddr *) &their_addr, &sin_size);
-                    multipleSockets_trySyscall(new_sock, "Could not accept connection", fdmax, &master);
+                    multipleSockets_trySyscall(new_sock, "Could not accept new connection");
                     /*we add the new socket to the master fd set and update fdmax if necessary*/
                     FD_SET(new_sock, &master);
                     if (new_sock > fdmax)
@@ -126,7 +130,7 @@ int main(int argc, char *argv[])
                 }
                 else
                 {
-                    multipleSockets_trySyscall(recv(sockfd, &op, 1, 0), "Failed to receive op from client", fdmax, &master);
+                    multipleSockets_trySyscall(recv(sockfd, &op, 1, 0), "Failed to receive op from client");
                     switch (op)
                     {
                         case LOG_REQUEST:
@@ -175,10 +179,7 @@ void handleQuitOperation(int sockfd)
     FD_CLR(sockfd, &master);
 
 
-
 }
-
-
 
 
 Account *getAccountByUsername(char *username)
@@ -194,21 +195,26 @@ Account *getAccountByUsername(char *username)
     return NULL;
 }
 
-void chat_message_operation(int sockfd) {
+void chat_message_operation(int sockfd)
+{
     Account *tempAccount;
-    char target[MAX_USERNAME + 1];
+    char recipient[MAX_USERNAME + 1];
     char content[MAX_CONTENT + 1];
     char sendBuffer[MAX_USERNAME + MAX_CONTENT + 20] = {0};
     Mail *mail; // may not need
 
     // client sends all data at once, so we will not hang here
-    recvData(sockfd, target);
+    recvData(sockfd, recipient);
     recvData(sockfd, content);
 
-    if ((tempAccount = getAccountByUsername(target)) == NULL) {
-        sendToClientPrint(sockfd, "Chat could not sent - unknown target\n");
-    } else {
-        if (tempAccount->sockfd > 0) { // target is online
+    if ((tempAccount = getAccountByUsername(recipient)) == NULL)
+    {
+        sendToClientPrint(sockfd, "Chat could not sent - unknown recipient\n");
+    }
+    else
+    {
+        if (tempAccount->sockfd > 0)
+        { // recipient is online
             strcat(sendBuffer, "New message from ");
             strcat(sendBuffer, getAccountBySockfd(sockfd)->username);
             strcat(sendBuffer, ": ");
@@ -217,9 +223,12 @@ void chat_message_operation(int sockfd) {
 
             sendToClientPrint(tempAccount->sockfd, sendBuffer);
             sendHalt(tempAccount->sockfd);
-        } else {
-            // target is offline
-            if ((mail = (Mail *) malloc(sizeof(Mail))) == NULL) {
+        }
+        else
+        {
+            // recipient is offline
+            if ((mail = (Mail *) malloc(sizeof(Mail))) == NULL)
+            {
                 printf("Failed allocating memory for new mail struct in compose_operation.\nExiting...\n");
                 tryClose(sockfd);
                 exit(EXIT_FAILURE);
@@ -227,19 +236,23 @@ void chat_message_operation(int sockfd) {
 
             mail->sender = getAccountBySockfd(sockfd);
             strcpy(mail->content, content);
-            strcpy(mail->subject, "Message received offline");
+            strcpy(mail->subject, OFFLINE_MSG_SUBJECT);
             mail->recipients = (Account **) malloc(sizeof(Account *));
             mail->recipients_num = 1;
             mail->recipients[0] = tempAccount;
 
-            if (tempAccount->inbox_mail_indices == NULL) {
-                tempAccount->inbox_mail_indices = (unsigned short *) malloc((size_t)(sizeof(unsigned short)));
-            } else {
-                tempAccount->inbox_mail_indices = (unsigned short *) realloc(tempAccount->inbox_mail_indices,
-                                                                             (size_t)((tempAccount->inbox_size + 1) *
-                                                                                      sizeof(unsigned short)));
+            if (tempAccount->inbox_mail_indices == NULL)
+            {
+                tempAccount->inbox_mail_indices = (unsigned short *) malloc((size_t) (sizeof(unsigned short)));
             }
-            if (tempAccount->inbox_mail_indices == NULL) {
+            else
+            {
+                tempAccount->inbox_mail_indices = (unsigned short *) realloc(tempAccount->inbox_mail_indices,
+                                                                             (size_t) ((tempAccount->inbox_size + 1) *
+                                                                                       sizeof(unsigned short)));
+            }
+            if (tempAccount->inbox_mail_indices == NULL)
+            {
                 printf("Failed allocating memory for inbox mail indices in compose_operation.\nExiting...\n");
                 tryClose(sockfd);
                 exit(EXIT_FAILURE);
@@ -314,7 +327,7 @@ void compose_operation(int sockfd)
             if (tempAccount->inbox_mail_indices == NULL)
             {
                 printf("Failed allocating memory for inbox mail indices in compose_operation.\nExiting...\n");
-                tryClose(sockfd);
+                closeAllSockets();
                 exit(EXIT_FAILURE);
             }
             tempAccount->inbox_mail_indices[tempAccount->inbox_size] = mails_num; /* add mail idx to indices list */
@@ -376,7 +389,6 @@ void show_inbox_operation(int sockfd)
     }
     sendHalt(sockfd);
 }
-
 
 
 Account *getAccountBySockfd(int sockfd)
@@ -494,14 +506,14 @@ bool loadUsersFromFile(char *path)
 void handleLoginRequest(int sockfd)
 {
     int i;
-    char username[MAX_USERNAME] = {0};
-    char password[MAX_PASSWORD] = {0};
+    char username[MAX_USERNAME + 1] = {0};
+    char password[MAX_PASSWORD + 1] = {0};
 
     recvData(sockfd, username);
     recvData(sockfd, password);
     for (i = 0; i < users_num; i++)
     {
-        /*if we found a matching user - update user online status and socket fd*/
+        /*if we found a matching user - update the user's socket fd*/
         if ((strcmp(accounts[i]->username, username) == 0) && (strcmp(accounts[i]->password, password) == 0))
         {
             accounts[i]->sockfd = sockfd;
@@ -584,7 +596,7 @@ void show_online_users(int sockfd)
     {
         if (accounts[i]->sockfd > 0)
         {
-            if(flag)/*comma separation handling - the "if" will be entered only if there's more than one user online*/
+            if (flag)/*comma separation handling - the "if" will be entered only if there's more than one user online*/
             {
                 strcat(buf, ", ");
 
@@ -596,4 +608,29 @@ void show_online_users(int sockfd)
     strcat(buf, "\n");
     sendToClientPrint(sockfd, buf);
     sendHalt(sockfd);
+}
+
+
+void closeAllSockets()
+{
+    /*iterate thorugh all possible fds, close only those that really exist*/
+    for (int sockfd = 0; sockfd <= fdmax; ++sockfd)
+    {
+        if (FD_ISSET(sockfd, &master))
+        {
+            tryClose(sockfd);
+        }
+    }
+
+}
+
+void multipleSockets_trySyscall(int syscallResult, char *msg)
+{
+    if (syscallResult < 0)
+    {
+        perror(msg);
+        closeAllSockets();
+        exit(EXIT_FAILURE);
+    }
+
 }

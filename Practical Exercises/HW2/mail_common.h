@@ -27,7 +27,7 @@
 #define NUM_OF_CLIENTS 20
 #define BUF_SIZE 4096
 #define ERROR_MSG_SIZE 100
-#define STDIN 0
+
 
 #define OP_SHOWINBOX 's'
 #define OP_SHOW_ONLINE_USERS 'u'
@@ -69,8 +69,6 @@ void shutdownSocket(int sock);
 
 void handleUnexpectedError(const char *errorMsg, int sockfd);
 
-void closeAllSockets(int fdmax, fd_set *set);
 
-void multipleSockets_trySyscall(int syscallResult, char *msg, int fdmax, fd_set *set);
 
 #endif /* MAIL_COMMON_H */

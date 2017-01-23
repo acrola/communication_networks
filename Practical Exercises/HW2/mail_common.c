@@ -163,26 +163,3 @@ void handleUnexpectedError(const char *errorMsg, int sockfd)
 }
 
 
-void closeAllSockets(int fdmax, fd_set *set)
-{
-    /*iterate thorugh all possible fds, close only those that really exist*/
-    for (int sockfd = 0; sockfd <= fdmax; ++sockfd)
-    {
-        if (sockfd != STDIN && FD_ISSET(sockfd, set))
-        {
-            tryClose(sockfd);
-        }
-    }
-
-}
-
-void multipleSockets_trySyscall(int syscallResult, char *msg, int fdmax, fd_set *set)
-{
-    if (syscallResult < 1)
-    {
-        perror(msg);
-        closeAllSockets(fdmax, set);
-        exit(EXIT_FAILURE);
-    }
-
-}
